@@ -1,0 +1,13 @@
+node_modules
+dist-worker*
+.env
+.env.*
+!.env.example
+dump.rdb
+.git
+.gitignore
+.DS_Store
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
