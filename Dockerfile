@@ -50,7 +50,7 @@ COPY package.json package-lock.json* bun.lockb* ./
 COPY prisma ./prisma/
 
 # Install production dependencies
-RUN bun install --production
+RUN bun install
 
 # Copy generated Prisma engine/client and compiled worker bundle from builder
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
