@@ -1,0 +1,9 @@
+# REVIEW TEMPLATE ONLY
+[Unit]
+Description=Check Showwork publishing worker every minute
+[Timer]
+OnBootSec=90
+OnUnitActiveSec=60
+Unit=showwork-publishing-health.service
+[Install]
+WantedBy=timers.target

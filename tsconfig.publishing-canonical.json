@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.publishing-intent-actions.json",
+  "include": ["lib/publishing/canonicalContract.ts", "lib/publishing/canonicalStore.ts", "lib/publishing/transactionDatabase.ts", "lib/publishing/intentActions.ts", "lib/publishing/ownership.ts", "lib/publishing/retryPolicy.ts"]
+}

@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.worker.json",
+  "include": ["lib/publishing/ownership.ts", "lib/publishing/retryPolicy.ts"],
+  "exclude": ["node_modules", "dist-worker"]
+}

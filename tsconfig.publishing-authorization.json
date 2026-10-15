@@ -1,0 +1,4 @@
+{
+ "extends":"./tsconfig.publishing-validation.json",
+ "include":["lib/publishing/externalAuthorization.ts","lib/publishing/eligibilityPolicy.ts","lib/publishing/validationAdapters.ts","lib/publishing/canonicalContract.ts","lib/publishing/canonicalStore.ts","lib/publishing/transactionDatabase.ts","lib/publishing/intentActions.ts","lib/publishing/ownership.ts","lib/publishing/retryPolicy.ts"]
+}

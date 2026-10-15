@@ -1,0 +1,53 @@
+# REVIEW TEMPLATE ONLY. Do not install/enable until the runner and migration are approved.
+[Unit]
+Description=Showwork publishing worker (activation blocked)
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/etc/showwork/publishing.approved
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=showwork
+Group=showwork
+WorkingDirectory=/home/showwork/app
+Environment=NODE_ENV=production
+Environment=TZ=UTC
+Environment=TMPDIR=/var/lib/showwork-publishing/tmp
+# Future composition reads secrets from this credential file, never from Git.
+LoadCredential=publishing.json:/etc/showwork/publishing.credentials.json
+ExecStartPre=/usr/bin/node /home/showwork/app/scripts/vps/worker.cjs --check
+# --run intentionally exits 78 until a separately reviewed production composition exists.
+ExecStart=/usr/bin/node /home/showwork/app/scripts/vps/worker.cjs --run
+Restart=on-failure
+RestartPreventExitStatus=78
+RestartSec=10
+TimeoutStopSec=40
+KillSignal=SIGTERM
+KillMode=control-group
+UMask=0077
+RuntimeDirectory=showwork-publishing
+RuntimeDirectoryMode=0700
+StateDirectory=showwork-publishing
+StateDirectoryMode=0700
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+LimitNOFILE=4096
+TasksMax=128
+MemoryMax=2G
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=showwork-publishing
+
+[Install]
+WantedBy=multi-user.target

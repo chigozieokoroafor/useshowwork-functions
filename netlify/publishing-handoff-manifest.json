@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "functionsDirectory": "netlify/functions-vps",
+  "retired": [
+    "publish-post-background.ts",
+    "social-publish-cron.ts"
+  ],
+  "retained": [
+    {
+      "file": "ai-research-cron.ts",
+      "sha256": "bcfc06464bc3d7cfa57f5463953735069aa6d6ee03ec93db66f06a84634cb7f9"
+    },
+    {
+      "file": "billing-benefit-emails-cron.ts",
+      "sha256": "955420bb6d6b4f28d14c627a145676650bd7a26a22bf1a4c5b04514dc22aac13"
+    },
+    {
+      "file": "billing-offers-cron.ts",
+      "sha256": "187f0fd1aeca8432f17c2c0f79d1bc934296b3eb8c779709f4dc712910e9ed1a"
+    },
+    {
+      "file": "calendar-trial-emails-cron.ts",
+      "sha256": "1abe5b7d0033363e742d501f5796bad9b270fbfd745dfa61316515594bed6b22"
+    },
+    {
+      "file": "content-workspace-storage-cron.ts",
+      "sha256": "585c8877a12a5ef005f7c06672d9e3ccb150ca6c76f0eb97b3cd768413eabb13"
+    },
+    {
+      "file": "lifecycle-emails-cron.ts",
+      "sha256": "f8c14d6266c0639795ad4545aa2220a83a2eb8af6a606f7635357297ab5f7822"
+    },
+    {
+      "file": "payment-revenue-cron.ts",
+      "sha256": "f8fe21e636cde71046609da00f591fa305f25ddd0563aaeaa061084bdd32b34d"
+    },
+    {
+      "file": "reporting-sync-background.ts",
+      "sha256": "98ff929111454c92bb170d55196d1701829d4c05a91e59881efa94f5253c3ecc"
+    },
+    {
+      "file": "reporting-sync-cron.ts",
+      "sha256": "d2fc81b228789b4305bcad883f4b885cb5866802f600427851981dcb7dde99e4"
+    },
+    {
+      "file": "social-inbox-auto-replies-cron.ts",
+      "sha256": "f737d231fc9e37845535c6ae20b2b4b7865495077c4801df09e34fc1d67dcadd"
+    },
+    {
+      "file": "social-inbox-auto-reply-background.ts",
+      "sha256": "9c0d8f2923b37cb6f07140a25ec32521e0a4103e8465151654a0d1050bb1a2be"
+    },
+    {
+      "file": "social-inbox-sync-background.ts",
+      "sha256": "02aa0ea2e3334375da000500890653f6339fdd129e2372b4d5fcd6f57a7e24f6"
+    },
+    {
+      "file": "social-inbox-sync-cron.ts",
+      "sha256": "91bcde44d9cfbdf5cdcf4dc2d442a1f0394951bf15529d5656f2203a86a935c7"
+    }
+  ],
+  "productionMeasured": false,
+  "publishingScheduleInvocationsPerDayRemoved": 1440,
+  "backgroundInvocationsRemoved": "one per previous publishing dispatch, plus any retries; telemetry required"
+}

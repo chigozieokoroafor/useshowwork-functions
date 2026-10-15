@@ -1,0 +1,1 @@
+ALTER TYPE "ContentWorkspacePlan" ADD VALUE 'UNLIMITED';

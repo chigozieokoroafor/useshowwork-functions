@@ -1,0 +1,13 @@
+{
+  "environment": "preparation",
+  "publishingEnabled": false,
+  "applicationDirectory": "/home/showwork/app",
+  "serviceUser": "showwork",
+  "databaseBackendLimit": 5,
+  "heavyTransactionLimit": 3,
+  "consumerLimit": 2,
+  "attemptsPerConsumer": 8,
+  "consumerDurationMs": 600000,
+  "tickIntervalMs": 60000,
+  "shutdownDeadlineMs": 30000
+}

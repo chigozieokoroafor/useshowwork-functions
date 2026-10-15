@@ -1,0 +1,13 @@
+CREATOR:
+  workspaces: 1
+  collaborators: 3
+  storageGb: 5
+  aiGenerations: 100
+  aiRegenerations: 30
+
+STUDIO:
+  workspaces: 10
+  collaborators: 15
+  storageGb: 50
+  aiGenerations: 500
+  aiRegenerations: 150

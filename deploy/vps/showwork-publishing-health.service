@@ -1,0 +1,12 @@
+# REVIEW TEMPLATE ONLY. Local health verification; an independent host-down alert is still required.
+[Unit]
+Description=Check Showwork publishing heartbeat
+ConditionPathExists=/etc/showwork/publishing.approved
+[Service]
+Type=oneshot
+User=showwork
+Group=showwork
+ExecStart=/usr/bin/node /home/showwork/app/scripts/vps/healthcheck.cjs
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only

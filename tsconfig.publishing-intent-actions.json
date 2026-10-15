@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.publishing-ownership.json",
+  "include": ["lib/publishing/intentActions.ts", "lib/publishing/ownership.ts", "lib/publishing/retryPolicy.ts"]
+}

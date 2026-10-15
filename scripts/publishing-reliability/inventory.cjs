@@ -1,0 +1,21 @@
+'use strict';
+// Read-only source inspection; writes inventory artifacts only when run explicitly.
+const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),ts=require('typescript');
+const roots=['app','lib','netlify/functions','workers','scripts/vps'];
+function files(dir){return fs.existsSync(dir)?fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?files(path.join(dir,e.name)):/\.(tsx?|sql|cjs|mjs)$/.test(e.name)?[path.join(dir,e.name)]:[]):[];}
+const table=/(?:calendarPostAsset|calendarPost|socialConnection|socialCalendar|calendarCollaborator|creator|mediaAsset|mediaFile|billingSubscription|complimentaryGrant)\s*\.\s*(create\w*|update\w*|upsert|delete\w*)/g;
+const publisher=/publishPostToInstagram|publishPostToTikTok|publishFacebook|publishLinkedIn|publishX|publishContainer|initTikTok(?:Video|Photo)Publish|runPublishJob|runScheduled(?:Instagram|TikTok)?Publishing|runPublishingBatchScheduler|importLegacyPublishingRecovery|beginExternal|recoverExpired/;
+const policy=/contentWorkspace(?:BillingStatus|Plan|TrialEndsAt)|workspaceComped|isComped|compedUntil|deleteObject|instagramConnected|tikTokConnected|calendarTeamService|complimentaryAccess|syncContentWorkspaceRenewal/;
+const inventory=[];
+for(const file of roots.flatMap(files).sort()){
+ const source=fs.readFileSync(file,'utf8');if(!table.test(source)&&!publisher.test(source)&&!policy.test(source)&&!file.startsWith('lib/publishing/')&&!/(instagramPublishing|tiktokPublishing|tiktokAuthorization|calendarImport\/confirmation|socialTokens|instagram\.ts|tiktok\.ts)/.test(file)){table.lastIndex=0;continue;}table.lastIndex=0;
+ const ast=ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true,file.endsWith('tsx')?ts.ScriptKind.TSX:ts.ScriptKind.TS);const functions=[];
+ function visit(node){if(ts.isFunctionDeclaration(node)||ts.isMethodDeclaration(node)||ts.isArrowFunction(node)||ts.isFunctionExpression(node)){
+  let name=node.name?.getText(ast);if(!name&&ts.isVariableDeclaration(node.parent))name=node.parent.name.getText(ast);if(!name&&ts.isCallExpression(node.parent))name=node.parent.expression.getText(ast)+':callback';name=name||'anonymous@'+(ast.getLineAndCharacterOfPosition(node.pos).line+1);
+  const body=node.body?.getText(ast)||'',writes=[...body.matchAll(table)].map(m=>m[0].replace(/\s/g,''));table.lastIndex=0;
+  if(writes.length||publisher.test(body)||policy.test(body)||node.modifiers?.some(m=>m.kind===ts.SyntaxKind.ExportKeyword))functions.push({name,line:ast.getLineAndCharacterOfPosition(node.getStart(ast)).line+1,async:!!node.modifiers?.some(m=>m.kind===ts.SyntaxKind.AsyncKeyword),writes:[...new Set(writes)],bodyHash:crypto.createHash('sha256').update(body).digest('hex'),canInvokePublisher:publisher.test(body)||/^(publish|initTikTok.*Publish)/.test(name)});
+ }ts.forEachChild(node,visit);}visit(ast);
+ const writes=[...source.matchAll(table)].map(m=>m[0].replace(/\s/g,''));table.lastIndex=0;
+ inventory.push({file,sourceHash:crypto.createHash('sha256').update(source).digest('hex'),functions,writes:[...new Set(writes)],fields:[...new Set(source.match(/\b(?:approvalStatus|isAiDraft|postDate|updatedAt|publish\w*|instagram\w*|tikTok\w*|platformPostId|contentWorkspace\w*|tokenScopes|accessToken\w*|fileKey|permissions|role)\b/g)||[])],checks:[...new Set(source.match(/\b(?:getCurrentCreator|hasCalendarPermission|canAccessCalendarById|verify\w*|isAdminEmail|requireScopes|validate\w*|CRON_SECRET|publishing\.manage)\b/g)||[])],canInitiatePublication:publisher.test(source),eligibilityMutation:!!writes.length||policy.test(source),currentAuthority:/^(lib\/publishing\/(canonical|externalAuthorization|capabilityProviders|providerJournal|validationAdapters|intentActions|ownership))/.test(file)?'CANONICAL_INACTIVE':'LEGACY_OR_INDIRECT',risk:publisher.test(source)?'CRITICAL':writes.length?'HIGH':'MEDIUM',order:publisher.test(source)?1:writes.length?2:3});
+}
+const target=process.argv[2]||'docs/publishing-stage-4b-reconstructed-inventory.json';fs.writeFileSync(target,JSON.stringify({scope:'current local source, conservative indirect dependencies included',files:inventory},null,2)+'\n');console.log(JSON.stringify({artifact:target,files:inventory.length,functions:inventory.reduce((n,f)=>n+f.functions.length,0),publishers:inventory.filter(f=>f.canInitiatePublication).length}));

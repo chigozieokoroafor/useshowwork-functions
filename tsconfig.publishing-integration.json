@@ -1,0 +1,52 @@
+{
+  "extends": "./tsconfig.publishing-canonical-worker.json",
+  "include": [
+    "lib/publishing/credentialResolver.ts",
+    "lib/publishing/statusProjection.ts",
+    "lib/publishing/databaseBudget.ts",
+    "lib/publishing/acceleratedComposition.ts",
+    "lib/publishing/applicationComposition.ts",
+    "lib/publishing/providerHttpAdapter.ts",
+    "lib/publishing/applicationBoundary.ts",
+    "lib/publishing/applicationActions.ts",
+    "lib/publishing/integrationControl.ts",
+    "lib/publishing/executionCoordination.ts",
+    "lib/publishing/immutableMedia.ts",
+    "lib/publishing/tokenRefreshFence.ts",
+    "lib/publishing/sharedJournal.ts",
+    "lib/publishing/authenticatedCallbacks.ts",
+    "lib/publishing/canonicalWorker.ts",
+    "lib/publishing/canonicalWorkerStore.ts",
+    "lib/publishing/capabilityProviders.ts",
+    "lib/publishing/providerJournal.ts",
+    "lib/publishing/providerSpool.ts",
+    "lib/publishing/externalAuthorization.ts",
+    "lib/publishing/eligibilityPolicy.ts",
+    "lib/publishing/validationAdapters.ts",
+    "lib/publishing/canonicalContract.ts",
+    "lib/publishing/canonicalStore.ts",
+    "lib/publishing/transactionDatabase.ts",
+    "lib/publishing/intentActions.ts",
+    "lib/publishing/ownership.ts",
+    "lib/publishing/retryPolicy.ts",
+    "lib/publishing/filesystemJournal.ts",
+    "lib/publishing/providerNormalization.ts",
+    "lib/publishing/nativeMediaPreparation.ts",
+    "lib/publishing/objectStorageAdapters.ts",
+    "lib/publishing/deploymentReadiness.ts",
+    "lib/publishing/publishingMonitoring.ts",
+    "lib/publishing/clientRequests.ts",
+    "lib/publishing/showworkApplication.ts",
+    "lib/publishing/showworkOAuth.ts",
+    "lib/publishing/showworkUploads.ts",
+    "lib/contentWorkspacePolicy.ts",
+    "next-env.d.ts"
+  ],
+  "compilerOptions": {
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ]
+  }
+}

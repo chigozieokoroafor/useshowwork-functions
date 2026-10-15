@@ -1,0 +1,1778 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Creator {
+  id                                       String                               @id @default(uuid())
+  email                                    String                               @unique
+  passwordHash                             String
+  name                                     String?
+  accountType                              AccountType                          @default(CREATOR)
+  phone                                    String?
+  companyName                              String?
+  createdAt                                DateTime                             @default(now())
+  lastLoginAt                              DateTime?
+  avatarUrl                                String?
+  emailVerified                            Boolean                              @default(true)
+  isDeactivated                            Boolean                              @default(false)
+  notifyOnView                             Boolean                              @default(false)
+  subscriptionTier                         SubscriptionTier                     @default(FREE)
+  subscriptionActive                       Boolean                              @default(false)
+  subscriptionCycle                        BillingCycle?
+  paystackCustomerCode                     String?
+  paystackSubscriptionCode                 String?
+  paystackEmailToken                       String?
+  subscriptionRenewsAt                     DateTime?
+  currentCycleStart                        DateTime                             @default(now())
+  isComped                                 Boolean                              @default(false)
+  compedUntil                              DateTime?
+  discountPercent                          Int                                  @default(0)
+  deliveryOfferSubscriptionId              String?
+  workspaceOfferSubscriptionId             String?
+  billingComplimentaryGrants               Json                                 @default("[]")
+  deliveryCompedTier                       SubscriptionTier?
+  deliveryCompedUntil                      DateTime?
+  workspaceCompedPlan                      ContentWorkspacePlan?
+  workspaceCompedUntil                     DateTime?
+  freeTierLimitOverride                    Int?
+  lifecycleSequenceStartedAt               DateTime?
+  welcomeEmailSentAt                       DateTime?
+  portfolioInviteEmailSentAt               DateTime?
+  projectManagementEmailSentAt             DateTime?
+  creativoPromoEmailSentAt                 DateTime?
+  lastDeliveryReminderSentAt               DateTime?
+  contentWorkspacePlan                     ContentWorkspacePlan?
+  contentWorkspaceBillingStatus            CalendarBillingStatus                @default(PENDING_SETUP)
+  contentWorkspaceBillingCycle             BillingCycle?
+  contentWorkspaceTrialUsedAt              DateTime?
+  contentWorkspaceTrialEndsAt              DateTime?
+  contentWorkspacePaystackSubscriptionCode String?
+  contentWorkspacePaystackEmailToken       String?
+  contentWorkspacePaystackCustomerCode     String?
+  contentWorkspaceSubscriptionRenewsAt     DateTime?
+  contentWorkspacePendingSubscriptionRef   String?                              @unique
+  contentWorkspaceWentOfflineAt            DateTime?
+  calendarAccountType                      CalendarAccountType?
+  calendarBillingStatus                    CalendarBillingStatus                @default(PENDING_SETUP)
+  calendarTrialUsedAt                      DateTime?
+  calendarTrialEndsAt                      DateTime?
+  calendarPaystackSubscriptionCode         String?
+  calendarPaystackEmailToken               String?
+  calendarPaystackCustomerCode             String?
+  calendarSubscriptionRenewsAt             DateTime?
+  calendarPendingSubscriptionRef           String?                              @unique
+  calendarWentOfflineAt                    DateTime?
+  calendarLastPaymentReminderSentAt        DateTime?
+  aiAssistantBillingStatus                 CalendarBillingStatus                @default(PENDING_SETUP)
+  aiAssistantTrialUsedAt                   DateTime?
+  aiAssistantTrialEndsAt                   DateTime?
+  aiAssistantPaystackSubscriptionCode      String?
+  aiAssistantPaystackEmailToken            String?
+  aiAssistantPaystackCustomerCode          String?
+  aiAssistantSubscriptionRenewsAt          DateTime?
+  aiAssistantPendingSubscriptionRef        String?                              @unique
+  aiAssistantWentOfflineAt                 DateTime?
+  calendarLastFreeMonthGrantedAt           DateTime?
+  calendarTrial2DaysLeftEmailSentAt        DateTime?
+  calendarTrialFollowUpEmailSentAt         DateTime?
+  calendarTrialEndsTodayEmailSentAt        DateTime?
+  calendarTrialEndedEmailSentAt            DateTime?
+  billingBenefitNotifications              BillingBenefitNotification[]
+  billingOfferRecipients                   BillingOfferRecipient[]
+  billingOfferRedemptions                  BillingOfferRedemption[]
+  billingOfferSubscriptions                BillingOfferSubscription[]
+  uploadedBriefAttachments                 BriefAttachment[]                    @relation("UploadedBriefAttachments")
+  calendarCollaborations                   CalendarCollaborator[]               @relation("CalendarMemberships")
+  calendarInvitesSent                      CalendarInvite[]                     @relation("CalendarInvitesSent")
+  reportingPermissionsGranted              CalendarReportingPermission[]        @relation("ReportingPermissionGrantedBy")
+  contentWorkspaceStorageReservations      ContentWorkspaceStorageReservation[]
+  contentWorkspaceUsage                    ContentWorkspaceUsage?
+  managedProjects                          ManagedProject[]
+  managedProjectCollaborations             ManagedProjectCollaborator[]         @relation("ManagedProjectMemberships")
+  managedProjectInvitesSent                ManagedProjectInvite[]               @relation("ManagedProjectInvitesSent")
+  uploadedMedia                            Media[]                              @relation("UploadedMedia")
+  partnerProfile                           PartnerProfile?
+  passwordResetTokens                      PasswordResetToken[]
+  paymentRecords                           PaymentRecord[]
+  portfolios                               Portfolio[]
+  projects                                 Project[]
+  projectCollaborations                    ProjectCollaborator[]                @relation("CollaboratorMemberships")
+  invitesSent                              ProjectInvite[]                      @relation("InvitesSent")
+  referredBy                               Referral?                            @relation("ReferredCreator")
+  ownedCalendars                           SocialCalendar[]                     @relation("OwnedCalendars")
+  spotlightSubmissions                     SpotlightSubmission[]
+  assignedTasks                            Task[]                               @relation("AssignedTasks")
+  createdTasks                             Task[]                               @relation("CreatedTasks")
+  uploadedTaskAssets                       TaskAsset[]                          @relation("UploadedTaskAssets")
+}
+
+model PartnerProfile {
+  id            String                @id @default(uuid())
+  creatorId     String                @unique
+  referralCode  String                @unique
+  status        PartnerStatus         @default(PENDING)
+  isActive      Boolean               @default(true)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  payouts       PartnerPayout[]
+  payoutAccount PartnerPayoutAccount?
+  creator       Creator               @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  referrals     Referral[]
+}
+
+model PartnerPayoutAccount {
+  id            String         @id @default(uuid())
+  partnerId     String         @unique
+  bankName      String
+  accountNumber String
+  accountName   String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  partner       PartnerProfile @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+}
+
+model PartnerPayout {
+  id                String                    @id @default(uuid())
+  partnerId         String
+  amountNgn         Int
+  status            PartnerPayoutStatus       @default(PENDING)
+  requestedAt       DateTime                  @default(now())
+  approvedAt        DateTime?
+  paidAt            DateTime?
+  payoutReference   String?
+  adminNote         String?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  partner           PartnerProfile            @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  payoutCommissions PartnerPayoutCommission[]
+
+  @@index([partnerId])
+  @@index([status])
+  @@index([requestedAt])
+}
+
+model PartnerPayoutCommission {
+  id           String             @id @default(uuid())
+  payoutId     String
+  commissionId String             @unique
+  amountNgn    Int
+  createdAt    DateTime           @default(now())
+  commission   ReferralCommission @relation(fields: [commissionId], references: [id])
+  payout       PartnerPayout      @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+
+  @@index([payoutId])
+  @@index([commissionId])
+}
+
+model Referral {
+  id                String                @id @default(uuid())
+  partnerId         String
+  referredCreatorId String                @unique
+  status            PartnerReferralStatus @default(PENDING)
+  startedAt         DateTime?
+  commissionEndsAt  DateTime?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  partner           PartnerProfile        @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  referredCreator   Creator               @relation("ReferredCreator", fields: [referredCreatorId], references: [id], onDelete: Cascade)
+  commissions       ReferralCommission[]
+
+  @@index([partnerId])
+  @@index([referredCreatorId])
+  @@index([status])
+  @@index([commissionEndsAt])
+}
+
+model ReferralCommission {
+  id                  String                   @id @default(uuid())
+  referralId          String
+  paymentRecordId     String                   @unique
+  paymentAmountNgn    Int
+  commissionPercent   Int
+  commissionAmountNgn Int
+  status              PartnerCommissionStatus  @default(PENDING)
+  earnedAt            DateTime                 @default(now())
+  approvedAt          DateTime?
+  paidAt              DateTime?
+  payoutReference     String?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  payoutAllocation    PartnerPayoutCommission?
+  referral            Referral                 @relation(fields: [referralId], references: [id], onDelete: Cascade)
+
+  @@index([referralId])
+  @@index([status])
+  @@index([earnedAt])
+}
+
+model Project {
+  id                    String                @id @default(uuid())
+  slug                  String                @unique
+  clientName            String
+  deliveryStatus        DeliveryStatus        @default(DELIVERED)
+  passwordHash          String
+  accessCode            String?
+  paid                  Boolean               @default(false)
+  paidAt                DateTime?
+  paystackRef           String?               @unique
+  badgeVisible          Boolean               @default(true)
+  captureViewerEmail    Boolean               @default(true)
+  logoUrl               String?
+  primaryColor          String?
+  bgColor               String?
+  heroMediaId           String?
+  heroTagline           String?
+  viewCount             Int                   @default(0)
+  replaceCount          Int                   @default(0)
+  additionalUploadCount Int                   @default(0)
+  deletedAt             DateTime?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  creatorId             String
+  managedProject        ManagedProject?
+  media                 Media[]
+  sections              MediaSection[]
+  creator               Creator               @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  collaborators         ProjectCollaborator[]
+  invites               ProjectInvite[]
+  viewerEmails          ViewerEmail[]
+}
+
+model ProjectCollaborator {
+  id        String   @id @default(uuid())
+  projectId String
+  creatorId String
+  addedAt   DateTime @default(now())
+  creator   Creator  @relation("CollaboratorMemberships", fields: [creatorId], references: [id], onDelete: Cascade)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, creatorId])
+  @@index([projectId])
+  @@index([creatorId])
+}
+
+model ProjectInvite {
+  id                 String       @id @default(uuid())
+  projectId          String
+  invitedByCreatorId String
+  email              String
+  tokenHash          String       @unique
+  status             InviteStatus @default(PENDING)
+  expiresAt          DateTime
+  createdAt          DateTime     @default(now())
+  respondedAt        DateTime?
+  invitedByCreator   Creator      @relation("InvitesSent", fields: [invitedByCreatorId], references: [id], onDelete: Cascade)
+  project            Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([email])
+}
+
+model MediaSection {
+  id           String    @id @default(uuid())
+  projectId    String
+  name         String
+  mediaType    MediaType
+  displayOrder Int       @default(0)
+  createdAt    DateTime  @default(now())
+  folders      Folder[]
+  media        Media[]
+  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Folder {
+  id           String       @id @default(uuid())
+  sectionId    String
+  name         String
+  displayOrder Int          @default(0)
+  createdAt    DateTime     @default(now())
+  section      MediaSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  media        Media[]
+
+  @@index([sectionId])
+}
+
+model ManagedProject {
+  id                     String                       @id @default(uuid())
+  creatorId              String
+  name                   String
+  status                 ManagedProjectStatus         @default(NOT_STARTED)
+  briefObjective         String?
+  briefBackground        String?
+  briefTargetAudience    String?
+  briefCreativeDirection String?
+  briefDeliverables      String?
+  briefBrandGuidelines   String?
+  briefReferences        String?
+  briefRequiredFormats   String?
+  briefPlatforms         String?
+  briefImportantNotes    String?
+  briefDeadline          DateTime?
+  briefVisibleToClient   Boolean                      @default(false)
+  deliveryProjectId      String?                      @unique
+  publishedAt            DateTime?
+  createdAt              DateTime                     @default(now())
+  updatedAt              DateTime                     @updatedAt
+  briefAttachments       BriefAttachment[]
+  creator                Creator                      @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  deliveryProject        Project?                     @relation(fields: [deliveryProjectId], references: [id])
+  collaborators          ManagedProjectCollaborator[]
+  invites                ManagedProjectInvite[]
+  milestones             Milestone[]
+  tasks                  Task[]
+}
+
+model BriefAttachment {
+  id                  String         @id @default(uuid())
+  managedProjectId    String
+  fileKey             String
+  filename            String?
+  uploadedByCreatorId String
+  createdAt           DateTime       @default(now())
+  managedProject      ManagedProject @relation(fields: [managedProjectId], references: [id], onDelete: Cascade)
+  uploadedBy          Creator        @relation("UploadedBriefAttachments", fields: [uploadedByCreatorId], references: [id], onDelete: Cascade)
+
+  @@index([managedProjectId])
+}
+
+model Milestone {
+  id               String         @id @default(uuid())
+  managedProjectId String
+  name             String
+  dueDate          DateTime?
+  displayOrder     Int            @default(0)
+  createdAt        DateTime       @default(now())
+  managedProject   ManagedProject @relation(fields: [managedProjectId], references: [id], onDelete: Cascade)
+  tasks            Task[]
+
+  @@index([managedProjectId])
+}
+
+model ManagedProjectCollaborator {
+  id               String         @id @default(uuid())
+  managedProjectId String
+  creatorId        String
+  addedAt          DateTime       @default(now())
+  creator          Creator        @relation("ManagedProjectMemberships", fields: [creatorId], references: [id], onDelete: Cascade)
+  managedProject   ManagedProject @relation(fields: [managedProjectId], references: [id], onDelete: Cascade)
+
+  @@unique([managedProjectId, creatorId])
+  @@index([managedProjectId])
+  @@index([creatorId])
+}
+
+model ManagedProjectInvite {
+  id                 String         @id @default(uuid())
+  managedProjectId   String
+  invitedByCreatorId String
+  email              String
+  tokenHash          String         @unique
+  status             InviteStatus   @default(PENDING)
+  expiresAt          DateTime
+  createdAt          DateTime       @default(now())
+  respondedAt        DateTime?
+  invitedByCreator   Creator        @relation("ManagedProjectInvitesSent", fields: [invitedByCreatorId], references: [id], onDelete: Cascade)
+  managedProject     ManagedProject @relation(fields: [managedProjectId], references: [id], onDelete: Cascade)
+
+  @@index([managedProjectId])
+  @@index([email])
+}
+
+model Task {
+  id                  String         @id @default(uuid())
+  managedProjectId    String
+  title               String
+  description         String?
+  assignedToCreatorId String
+  createdByCreatorId  String
+  status              TaskStatus     @default(TODO)
+  priority            TaskPriority   @default(MEDIUM)
+  dueDate             DateTime?
+  milestoneId         String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  completedAt         DateTime?
+  assignedTo          Creator        @relation("AssignedTasks", fields: [assignedToCreatorId], references: [id], onDelete: Cascade)
+  createdBy           Creator        @relation("CreatedTasks", fields: [createdByCreatorId], references: [id], onDelete: Cascade)
+  managedProject      ManagedProject @relation(fields: [managedProjectId], references: [id], onDelete: Cascade)
+  milestone           Milestone?     @relation(fields: [milestoneId], references: [id])
+  linkedAssets        TaskAsset[]
+  folders             TaskFolder[]
+
+  @@index([managedProjectId])
+  @@index([assignedToCreatorId])
+  @@index([milestoneId])
+}
+
+model TaskFolder {
+  id           String      @id @default(uuid())
+  taskId       String
+  name         String
+  displayOrder Int         @default(0)
+  createdAt    DateTime    @default(now())
+  assets       TaskAsset[]
+  task         Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+model TaskAsset {
+  id                   String               @id @default(uuid())
+  taskId               String
+  fileKey              String
+  filename             String?
+  type                 MediaType            @default(PHOTO)
+  uploadedByCreatorId  String
+  folderId             String?
+  internalReviewStatus InternalReviewStatus @default(PENDING)
+  internalReviewNote   String?
+  internalReviewedAt   DateTime?
+  promotedToMediaId    String?              @unique
+  createdAt            DateTime             @default(now())
+  folder               TaskFolder?          @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  promotedToMedia      Media?               @relation(fields: [promotedToMediaId], references: [id])
+  task                 Task                 @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploadedBy           Creator              @relation("UploadedTaskAssets", fields: [uploadedByCreatorId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+model Media {
+  id                    String         @id @default(uuid())
+  projectId             String
+  type                  MediaType
+  fileKey               String
+  caption               String?
+  displayOrder          Int            @default(0)
+  createdAt             DateTime       @default(now())
+  sectionId             String?
+  folderId              String?
+  uploadedByCreatorId   String?
+  approvalStatus        ApprovalStatus @default(PENDING)
+  approvalNote          String?
+  reviewedAt            DateTime?
+  reviewerEmail         String?
+  folder                Folder?        @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  project               Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  section               MediaSection?  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  uploadedByCreator     Creator?       @relation("UploadedMedia", fields: [uploadedByCreatorId], references: [id])
+  reviews               MediaReview[]
+  promotedFromTaskAsset TaskAsset?
+  videoComments         VideoComment[]
+}
+
+model MediaReview {
+  id            String         @id @default(uuid())
+  mediaId       String
+  reviewerName  String?
+  reviewerEmail String
+  status        ApprovalStatus
+  note          String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  media         Media          @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@unique([mediaId, reviewerEmail])
+  @@index([mediaId])
+}
+
+model VideoComment {
+  id                    String   @id @default(uuid())
+  mediaId               String
+  reviewerName          String?
+  reviewerEmail         String
+  note                  String
+  videoTimestampSeconds Float
+  createdAt             DateTime @default(now())
+  media                 Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@index([mediaId])
+}
+
+model ViewerEmail {
+  id        String   @id @default(uuid())
+  projectId String
+  name      String?
+  email     String
+  viewedAt  DateTime @default(now())
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model PendingSignup {
+  id           String      @id @default(uuid())
+  email        String      @unique
+  name         String?
+  phone        String?
+  companyName  String?
+  referralCode String?
+  accountType  AccountType @default(CREATOR)
+  passwordHash String
+  otpCode      String
+  otpExpiresAt DateTime
+  createdAt    DateTime    @default(now())
+}
+
+model PaymentRecord {
+  id                   String                @id @default(uuid())
+  creatorId            String
+  amountNgn            Int
+  revenueStatus        String                @default("UNVERIFIED")
+  revenueReason        String?
+  type                 PaymentType
+  tier                 SubscriptionTier?
+  cycle                BillingCycle?
+  contentWorkspacePlan ContentWorkspacePlan?
+  portfolioId          String?
+  calendarId           String?
+  paystackReference    String?               @unique
+  createdAt            DateTime              @default(now())
+  creator              Creator               @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@index([creatorId])
+  @@index([createdAt])
+  @@index([portfolioId])
+  @@index([revenueStatus])
+}
+
+model PlatformSettings {
+  id                       String  @id @default("singleton")
+  globalDiscountPercent    Int     @default(0)
+  creativoMemberCountLabel String?
+}
+
+model CreativoLeaderboardEntry {
+  id                 String   @id @default(uuid())
+  name               String
+  profileImageUrl    String?
+  category           String
+  whatTheyDo         String?
+  contact            String?
+  portfolioUrl       String?
+  whatsappNumber     String?
+  wonFor             String
+  points             Int      @default(0)
+  periodDate         DateTime
+  sourceSubmissionId String?  @unique
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([category, periodDate])
+}
+
+model CreativoWebinar {
+  id            String           @id @default(uuid())
+  slug          String           @unique
+  flyerImageUrl String?
+  topic         String
+  description   String?
+  whatToExpect  String?
+  guests        String?
+  startsAt      DateTime
+  venue         String?
+  applyUrl      String?
+  replayUrl     String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  rsvps         WebinarRsvp[]
+  speakers      WebinarSpeaker[]
+
+  @@index([startsAt])
+}
+
+model WebinarSpeaker {
+  id              String          @id @default(uuid())
+  webinarId       String
+  name            String
+  title           String
+  bio             String?
+  profileImageUrl String?
+  instagramUrl    String?
+  youtubeUrl      String?
+  xUrl            String?
+  linkedinUrl     String?
+  displayOrder    Int             @default(0)
+  createdAt       DateTime        @default(now())
+  webinar         CreativoWebinar @relation(fields: [webinarId], references: [id], onDelete: Cascade)
+
+  @@index([webinarId])
+}
+
+model WebinarRsvp {
+  id              String          @id @default(uuid())
+  webinarId       String
+  name            String
+  email           String
+  whatsappNumber  String
+  field           String
+  joinedCommunity Boolean
+  createdAt       DateTime        @default(now())
+  webinar         CreativoWebinar @relation(fields: [webinarId], references: [id], onDelete: Cascade)
+
+  @@index([webinarId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  creatorId String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  creator   Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@index([creatorId])
+}
+
+model Portfolio {
+  id                        String                 @id @default(uuid())
+  slug                      String                 @unique
+  companyName               String
+  heroTagline               String?
+  heroMediaId               String?
+  heroBannerDesktopUrl      String?
+  heroBannerDesktopType     String?
+  heroBannerMobileUrl       String?
+  heroBannerMobileType      String?
+  logoUrl                   String?
+  primaryColor              String?
+  bgColor                   String?
+  viewCount                 Int                    @default(0)
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
+  contactEmail              String?
+  whatsappNumber            String?
+  ctaText                   String?
+  instagramUrl              String?
+  twitterUrl                String?
+  linkedinUrl               String?
+  tiktokUrl                 String?
+  facebookUrl               String?
+  youtubeUrl                String?
+  bioText                   String?
+  bioPhotoUrl               String?
+  bioSkills                 String[]               @default([])
+  bioStat                   String?
+  creatorId                 String
+  billingStatus             PortfolioBillingStatus @default(ACTIVE)
+  paystackSubscriptionCode  String?
+  paystackEmailToken        String?
+  paystackCustomerCode      String?
+  subscriptionRenewsAt      DateTime?
+  pendingSubscriptionRef    String?                @unique
+  wentOfflineAt             DateTime?
+  lastPaymentReminderSentAt DateTime?
+  creator                   Creator                @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  media                     PortfolioMedia[]
+  sections                  PortfolioSection[]
+  testimonials              PortfolioTestimonial[]
+
+  @@index([creatorId])
+}
+
+model PortfolioSection {
+  id           String           @id @default(uuid())
+  portfolioId  String
+  name         String
+  mediaType    MediaType
+  displayOrder Int              @default(0)
+  createdAt    DateTime         @default(now())
+  coverMediaId String?
+  media        PortfolioMedia[]
+  portfolio    Portfolio        @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@index([portfolioId])
+}
+
+model PortfolioMedia {
+  id           String            @id @default(uuid())
+  portfolioId  String
+  sectionId    String?
+  type         MediaType
+  fileKey      String
+  aspectRatio  Float?
+  caption      String?
+  displayOrder Int               @default(0)
+  createdAt    DateTime          @default(now())
+  portfolio    Portfolio         @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  section      PortfolioSection? @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@index([portfolioId])
+}
+
+model PortfolioTestimonial {
+  id           String    @id @default(uuid())
+  portfolioId  String
+  clientName   String
+  clientRole   String?
+  quote        String
+  rating       Int?
+  isApproved   Boolean   @default(true)
+  displayOrder Int       @default(0)
+  createdAt    DateTime  @default(now())
+  portfolio    Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@index([portfolioId])
+}
+
+model BlogPost {
+  id                 String    @id @default(uuid())
+  slug               String    @unique
+  title              String
+  excerpt            String?
+  bodyHtml           String
+  coverImageUrl      String?
+  category           String?
+  metaTitle          String?
+  metaDescription    String?
+  published          Boolean   @default(false)
+  publishedAt        DateTime?
+  viewCount          Int       @default(0)
+  deliverCtaClicks   Int       @default(0)
+  portfolioCtaClicks Int       @default(0)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([published, publishedAt])
+  @@index([category])
+}
+
+model SpotlightCycle {
+  id                 String                @id @default(uuid())
+  monthLabel         String
+  heroImageUrl       String?
+  heroHeadline       String?
+  heroDescription    String?
+  submissionOpensAt  DateTime
+  submissionDeadline DateTime
+  isActive           Boolean               @default(false)
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  submissions        SpotlightSubmission[]
+
+  @@index([isActive])
+}
+
+model SpotlightSubmission {
+  id             String         @id @default(uuid())
+  cycleId        String
+  creatorId      String?
+  name           String
+  email          String
+  phone          String?
+  whatsappNumber String?
+  category       String
+  projectLink    String
+  description    String
+  note           String?
+  isShortlisted  Boolean        @default(false)
+  rank           Int?
+  submittedAt    DateTime       @default(now())
+  creator        Creator?       @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  cycle          SpotlightCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@index([cycleId])
+  @@index([cycleId, rank])
+}
+
+model SocialCalendar {
+  id                                  String                               @id @default(uuid())
+  slug                                String                               @unique
+  clientName                          String
+  logoUrl                             String?
+  primaryColor                        String?
+  planStatus                          CalendarPlanStatus                   @default(BUILDING)
+  planSubmittedAt                     DateTime?
+  planApprovedAt                      DateTime?
+  planApprovalNote                    String?
+  headerBannerDesktopUrl              String?
+  headerBannerMobileUrl               String?
+  headerTitle                         String?
+  headerDescription                   String?
+  aiBusinessSummary                   String?
+  aiBusinessSummaryUpdatedAt          DateTime?
+  aiLastResearchedAt                  DateTime?
+  passwordHash                        String
+  accessCode                          String?
+  createdAt                           DateTime                             @default(now())
+  updatedAt                           DateTime                             @updatedAt
+  managerId                           String
+  instagramAccountId                  String?
+  instagramUsername                   String?
+  instagramPageId                     String?
+  instagramAccessToken                String?
+  instagramTokenExpiresAt             DateTime?
+  instagramConnectedAt                DateTime?
+  tikTokOpenId                        String?
+  tikTokUsername                      String?
+  tikTokAccessToken                   String?
+  tikTokAccessTokenExpiresAt          DateTime?
+  tikTokRefreshToken                  String?
+  tikTokConnectedAt                   DateTime?
+  facebookPageId                      String?
+  facebookPageName                    String?
+  facebookAccessToken                 String?
+  facebookTokenExpiresAt              DateTime?
+  facebookConnectedAt                 DateTime?
+  linkedinMemberId                    String?
+  linkedinName                        String?
+  linkedinAccessToken                 String?
+  linkedinAccessTokenExpiresAt        DateTime?
+  linkedinRefreshToken                String?
+  linkedinRefreshTokenExpiresAt       DateTime?
+  linkedinConnectedAt                 DateTime?
+  xUserId                             String?
+  xUsername                           String?
+  xAccessToken                        String?
+  xAccessTokenExpiresAt               DateTime?
+  xRefreshToken                       String?
+  xConnectedAt                        DateTime?
+  businessDocuments                   CalendarBusinessDocument[]
+  collaborators                       CalendarCollaborator[]
+  imports                             CalendarImport[]
+  invites                             CalendarInvite[]
+  leads                               CalendarLead[]
+  posts                               CalendarPost[]
+  reportingPermission                 CalendarReportingPermission?
+  teamActivities                      CalendarTeamActivity[]
+  viewerEmails                        CalendarViewerEmail[]
+  contentWorkspaceStorageReservations ContentWorkspaceStorageReservation[]
+  publishedSocialPosts                PublishedSocialPost[]
+  reportingInsights                   ReportingInsight[]
+  manager                             Creator                              @relation("OwnedCalendars", fields: [managerId], references: [id], onDelete: Cascade)
+  socialConnections                   SocialConnection[]
+  inboxSettings                       SocialInboxSettings?
+  leadConversations                   SocialLeadConversation[]
+
+  @@index([managerId])
+}
+
+model CalendarBusinessDocument {
+  id             String         @id @default(uuid())
+  calendarId     String
+  fileKey        String?
+  originalName   String
+  websiteUrl     String?
+  websiteUrlHash String?        @db.VarChar(64)
+  sizeBytes      BigInt         @default(0)
+  extractedText  String?
+  createdAt      DateTime       @default(now())
+  calendar       SocialCalendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+
+  @@unique([calendarId, websiteUrlHash])
+  @@index([calendarId])
+}
+
+model SocialConnection {
+  id                              String                        @id @default(uuid())
+  calendarId                      String
+  platform                        SocialPlatform
+  platformAccountId               String
+  whatsappBusinessAccountId       String?
+  accountName                     String?
+  username                        String?
+  accessToken                     String?
+  refreshToken                    String?
+  accessTokenExpiresAt            DateTime?
+  refreshTokenExpiresAt           DateTime?
+  tokenScopes                     String?
+  status                          SocialConnectionStatus        @default(CONNECTED)
+  connectedAt                     DateTime                      @default(now())
+  disconnectedAt                  DateTime?
+  lastSyncAttemptAt               DateTime?
+  lastSyncAt                      DateTime?
+  lastSyncError                   String?
+  tikTokMessagingBusinessId       String?
+  tikTokMessagingAccessToken      String?
+  tikTokMessagingRefreshToken     String?
+  tikTokMessagingTokenExpiresAt   DateTime?
+  tikTokMessagingRefreshExpiresAt DateTime?
+  tikTokMessagingScopes           String?
+  tikTokMessagingConnectedAt      DateTime?
+  messagingLastSyncAt             DateTime?
+  messagingSyncError              String?
+  messagingWebhookSubscribedAt    DateTime?
+  messagingWebhookError           String?
+  createdAt                       DateTime                      @default(now())
+  updatedAt                       DateTime                      @updatedAt
+  publishedPosts                  PublishedSocialPost[]
+  accountMetricSnapshots          SocialAccountMetricSnapshot[]
+  accountPosts                    SocialAccountPost[]
+  calendar                        SocialCalendar                @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  leadConversations               SocialLeadConversation[]
+
+  @@unique([calendarId, platform, platformAccountId])
+  @@index([calendarId, platform, status])
+  @@index([platform, status])
+}
+
+model SocialLeadConversation {
+  id                     String              @id @default(uuid())
+  calendarId             String
+  socialConnectionId     String?
+  platform               SocialPlatform
+  providerConversationId String
+  participantPlatformId  String
+  participantName        String?
+  participantUsername    String?
+  leadStatus             SocialLeadStatus    @default(NEW)
+  unreadCount            Int                 @default(0)
+  lastMessagePreview     String?
+  lastMessageAt          DateTime?
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  crmLead                CalendarLead?
+  calendar               SocialCalendar      @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  connection             SocialConnection?   @relation(fields: [socialConnectionId], references: [id])
+  messages               SocialLeadMessage[]
+
+  @@unique([socialConnectionId, providerConversationId])
+  @@index([calendarId, lastMessageAt])
+  @@index([calendarId, platform, leadStatus])
+}
+
+model CalendarLead {
+  id                   String                     @id @default(uuid())
+  calendarId           String
+  socialConversationId String?                    @unique
+  name                 String
+  username             String?
+  email                String?
+  phone                String?
+  company              String?
+  temperature          CalendarLeadTemperature    @default(WARM)
+  status               CalendarLeadPipelineStatus @default(NEW)
+  source               CalendarLeadSource         @default(MANUAL)
+  notes                String?
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
+  calendar             SocialCalendar             @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  socialConversation   SocialLeadConversation?    @relation(fields: [socialConversationId], references: [id])
+
+  @@unique([calendarId, email])
+  @@index([calendarId, status])
+  @@index([calendarId, temperature])
+  @@index([calendarId, updatedAt])
+}
+
+model SocialLeadMessage {
+  id                     String                      @id @default(uuid())
+  conversationId         String
+  providerMessageId      String?
+  direction              SocialInboxMessageDirection
+  status                 SocialInboxMessageStatus    @default(RECEIVED)
+  text                   String
+  platformCreatedAt      DateTime
+  sentByCreatorId        String?
+  isAiGenerated          Boolean                     @default(false)
+  autoReplyEligible      Boolean                     @default(false)
+  autoReplyClaimedAt     DateTime?
+  autoReplyHandledAt     DateTime?
+  autoReplyAttemptCount  Int                         @default(0)
+  autoReplyHandoffReason String?
+  sendError              String?
+  createdAt              DateTime                    @default(now())
+  conversation           SocialLeadConversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, providerMessageId])
+  @@index([conversationId, platformCreatedAt])
+}
+
+model SocialInboxSettings {
+  id                      String         @id @default(uuid())
+  calendarId              String         @unique
+  clientAccessEnabled     Boolean        @default(true)
+  aiAutoReplyEnabled      Boolean        @default(false)
+  aiAutoReplyInstructions String?
+  aiReplyProfile          Json?
+  updatedAt               DateTime       @updatedAt
+  createdAt               DateTime       @default(now())
+  calendar                SocialCalendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+}
+
+model PublishedSocialPost {
+  id                 String                     @id @default(uuid())
+  calendarId         String
+  calendarPostId     String
+  socialConnectionId String
+  platform           SocialPlatform
+  platformPostId     String?
+  providerReference  String?
+  permalink          String?
+  status             PublishedSocialPostStatus  @default(PUBLISHED)
+  publishedAt        DateTime?
+  platformPostType   String?
+  platformMetadata   Json?
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+  calendar           SocialCalendar             @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  calendarPost       CalendarPost               @relation(fields: [calendarPostId], references: [id], onDelete: Cascade)
+  connection         SocialConnection           @relation(fields: [socialConnectionId], references: [id], onDelete: Cascade)
+  metricSnapshots    SocialPostMetricSnapshot[]
+
+  @@unique([calendarPostId, socialConnectionId])
+  @@index([calendarId, publishedAt])
+  @@index([platform, platformPostId])
+}
+
+model SocialPostMetricSnapshot {
+  id                    String              @id @default(uuid())
+  publishedSocialPostId String
+  snapshotDate          DateTime            @db.Date
+  reach                 Float?
+  impressions           Float?
+  views                 Float?
+  engagement            Float?
+  engagementRate        Float?
+  engagementRateBasis   String?
+  likes                 Float?
+  comments              Float?
+  shares                Float?
+  saves                 Float?
+  clicks                Float?
+  additionalMetrics     Json?
+  sourceUpdatedAt       DateTime?
+  createdAt             DateTime            @default(now())
+  publishedPost         PublishedSocialPost @relation(fields: [publishedSocialPostId], references: [id], onDelete: Cascade)
+
+  @@unique([publishedSocialPostId, snapshotDate])
+  @@index([snapshotDate])
+}
+
+model SocialAccountMetricSnapshot {
+  id                 String           @id @default(uuid())
+  socialConnectionId String
+  snapshotDate       DateTime         @db.Date
+  followers          Float?
+  followerGrowth     Float?
+  reach              Float?
+  impressions        Float?
+  views              Float?
+  engagement         Float?
+  additionalMetrics  Json?
+  sourceUpdatedAt    DateTime?
+  createdAt          DateTime         @default(now())
+  connection         SocialConnection @relation(fields: [socialConnectionId], references: [id], onDelete: Cascade)
+
+  @@unique([socialConnectionId, snapshotDate])
+  @@index([snapshotDate])
+}
+
+model SocialAccountPost {
+  id                 String           @id @default(uuid())
+  socialConnectionId String
+  platformPostId     String
+  caption            String?
+  postType           String?
+  publishedAt        DateTime
+  permalink          String?
+  views              Float?
+  reach              Float?
+  impressions        Float?
+  engagement         Float?
+  likes              Float?
+  comments           Float?
+  shares             Float?
+  saves              Float?
+  metricsUpdatedAt   DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  connection         SocialConnection @relation(fields: [socialConnectionId], references: [id], onDelete: Cascade)
+
+  @@unique([socialConnectionId, platformPostId])
+  @@index([socialConnectionId, publishedAt])
+}
+
+model CalendarReportingPermission {
+  id          String         @id @default(uuid())
+  calendarId  String         @unique
+  enabled     Boolean        @default(false)
+  grantedById String?
+  grantedAt   DateTime?
+  revokedAt   DateTime?
+  updatedAt   DateTime       @updatedAt
+  createdAt   DateTime       @default(now())
+  calendar    SocialCalendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  grantedBy   Creator?       @relation("ReportingPermissionGrantedBy", fields: [grantedById], references: [id])
+}
+
+model ReportingInsight {
+  id             String               @id @default(uuid())
+  calendarId     String
+  platform       SocialPlatform?
+  periodStart    DateTime
+  periodEnd      DateTime
+  type           ReportingInsightType
+  title          String
+  description    String
+  recommendation String?
+  supportingData Json
+  generatedAt    DateTime             @default(now())
+  createdAt      DateTime             @default(now())
+  calendar       SocialCalendar       @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+
+  @@index([calendarId, periodStart, periodEnd])
+  @@index([calendarId, platform, type])
+}
+
+model CalendarPost {
+  id                     String                     @id @default(uuid())
+  calendarId             String
+  postDate               DateTime
+  platform               SocialPlatform
+  postType               String?
+  category               String?
+  caption                String?
+  hook                   String?
+  script                 String?
+  contentIdea            String?
+  cta                    String?
+  hashtags               String?
+  taggedAccounts         String?
+  linkUrl                String?
+  approvalStatus         PostApprovalStatus         @default(PENDING)
+  approvalNote           String?
+  reviewedAt             DateTime?
+  isAiDraft              Boolean                    @default(false)
+  instagramPublishStatus InstagramPublishStatus     @default(NOT_SCHEDULED)
+  instagramPublishedAt   DateTime?
+  instagramMediaId       String?
+  instagramPermalink     String?
+  instagramPublishError  String?
+  tikTokPublishStatus    TikTokPublishStatus        @default(NOT_SCHEDULED)
+  tikTokPrivacyLevel     TikTokPrivacyLevel?
+  tikTokSettings         Json?
+  tikTokConsentAt        DateTime?
+  tikTokConsentBy        String?
+  tikTokConsentAccountId String?
+  tikTokConsentHash      String?
+  tikTokConsentVersion   String?
+  tikTokInitStartedAt    DateTime?
+  tikTokPublishedAt      DateTime?
+  tikTokPublishId        String?
+  tikTokPublishError     String?
+  publishStatus          InstagramPublishStatus     @default(NOT_SCHEDULED)
+  publishedAt            DateTime?
+  platformPostId         String?
+  publishPermalink       String?
+  publishError           String?
+  publishWorkerStartedAt DateTime?
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @updatedAt
+  calendar               SocialCalendar             @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  aiGenerations          CalendarPostAiGeneration[]
+  assets                 CalendarPostAsset[]
+  comments               CalendarPostComment[]
+  customFields           CalendarPostCustomField[]
+  videoComments          CalendarPostVideoComment[]
+  publishedSocialPosts   PublishedSocialPost[]
+
+  @@index([publishStatus, postDate])
+  @@index([calendarId])
+  @@index([calendarId, postDate])
+}
+
+model CalendarPostAiGeneration {
+  id               String         @id @default(uuid())
+  postId           String
+  generationNumber Int
+  postDate         DateTime
+  platform         SocialPlatform
+  postType         String?
+  category         String?
+  caption          String?
+  hook             String?
+  script           String?
+  contentIdea      String?
+  cta              String?
+  hashtags         String?
+  createdAt        DateTime       @default(now())
+  post             CalendarPost   @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([postId, generationNumber])
+}
+
+model CalendarPostCustomField {
+  id     String       @id @default(uuid())
+  postId String
+  label  String
+  value  String
+  post   CalendarPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+}
+
+model CalendarPostAsset {
+  id           String       @id @default(uuid())
+  postId       String
+  fileKey      String
+  mediaType    MediaType
+  sizeBytes    BigInt       @default(0)
+  displayOrder Int          @default(0)
+  createdAt    DateTime     @default(now())
+  post         CalendarPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+}
+
+model CalendarPostComment {
+  id          String       @id @default(uuid())
+  postId      String
+  authorName  String?
+  authorEmail String
+  note        String
+  createdAt   DateTime     @default(now())
+  post        CalendarPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+}
+
+model CalendarPostVideoComment {
+  id                    String       @id @default(uuid())
+  postId                String
+  authorName            String?
+  authorEmail           String
+  note                  String
+  videoTimestampSeconds Float
+  createdAt             DateTime     @default(now())
+  post                  CalendarPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+}
+
+model CalendarCollaborator {
+  id                String         @id @default(uuid())
+  calendarId        String
+  creatorId         String
+  role              CalendarRole   @default(ADD_CONTENT)
+  permissions       String[]       @default([])
+  customPermissions Boolean        @default(false)
+  addedAt           DateTime       @default(now())
+  calendar          SocialCalendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  creator           Creator        @relation("CalendarMemberships", fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@unique([calendarId, creatorId])
+  @@index([calendarId])
+  @@index([creatorId])
+}
+
+model CalendarInvite {
+  id                 String         @id @default(uuid())
+  calendarId         String
+  invitedByCreatorId String
+  email              String
+  role               CalendarRole   @default(ADD_CONTENT)
+  permissions        String[]       @default([])
+  customPermissions  Boolean        @default(false)
+  deliveryStatus     String         @default("QUEUED")
+  lastDeliveryError  String?
+  tokenHash          String         @unique
+  status             InviteStatus   @default(PENDING)
+  expiresAt          DateTime
+  createdAt          DateTime       @default(now())
+  respondedAt        DateTime?
+  calendar           SocialCalendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  invitedByCreator   Creator        @relation("CalendarInvitesSent", fields: [invitedByCreatorId], references: [id], onDelete: Cascade)
+
+  @@index([calendarId])
+  @@index([email])
+}
+
+model CalendarViewerEmail {
+  id         String         @id @default(uuid())
+  calendarId String
+  name       String?
+  email      String
+  viewedAt   DateTime       @default(now())
+  calendar   SocialCalendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+
+  @@index([calendarId])
+}
+
+model ContentWorkspaceUsage {
+  creatorId            String   @id
+  cycleStart           DateTime @default(now())
+  storageBytes         BigInt   @default(0)
+  storageReservedBytes BigInt   @default(0)
+  aiGenerationsUsed    Int      @default(0)
+  aiRegenerationsUsed  Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  creator              Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+}
+
+model ContentWorkspaceStorageReservation {
+  id          String                                   @id @default(uuid())
+  creatorId   String
+  calendarId  String
+  fileKey     String
+  bytes       BigInt
+  status      ContentWorkspaceStorageReservationStatus @default(PENDING)
+  createdAt   DateTime                                 @default(now())
+  expiresAt   DateTime
+  completedAt DateTime?
+  releasedAt  DateTime?
+  calendar    SocialCalendar                           @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  creator     Creator                                  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@index([creatorId, status])
+  @@index([calendarId])
+  @@index([fileKey])
+  @@index([expiresAt])
+}
+
+model CalendarImport {
+  id          String         @id @default(uuid())
+  calendarId  String
+  requestId   String
+  creatorId   String
+  payloadHash String         @db.VarChar(64)
+  result      Json
+  createdAt   DateTime       @default(now())
+  calendar    SocialCalendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+
+  @@unique([calendarId, requestId])
+  @@index([calendarId])
+}
+
+model BillingOffer {
+  id             String                     @id @default(uuid())
+  title          String
+  product        String
+  deliveryTier   SubscriptionTier?
+  workspacePlan  ContentWorkspacePlan?
+  billingCycle   BillingCycle?
+  percent        Int
+  durationMonths Int
+  audience       String
+  availableUntil DateTime?
+  createdBy      String
+  createdAt      DateTime                   @default(now())
+  requestHash    String?
+  revokedBy      String?
+  revokedAt      DateTime?
+  recipients     BillingOfferRecipient[]
+  redemptions    BillingOfferRedemption[]
+  subscriptions  BillingOfferSubscription[]
+
+  @@index([revokedAt, availableUntil])
+}
+
+model BillingOfferRecipient {
+  offerId   String
+  creatorId String
+  revokedAt DateTime?
+  revokedBy String?
+  creator   Creator      @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  offer     BillingOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  @@id([offerId, creatorId])
+  @@index([creatorId])
+}
+
+model BillingOfferSubscription {
+  id                 String               @id @default(uuid())
+  offerId            String?
+  creatorId          String
+  product            String
+  plan               String
+  billingCycle       BillingCycle
+  title              String
+  percent            Int
+  durationMonths     Int
+  standardPriceNgn   Int
+  discountedPriceNgn Int
+  paystackPlanCode   String?              @unique
+  checkoutReference  String?              @unique
+  subscriptionCode   String?
+  status             String               @default("CHECKOUT")
+  paidCycles         Int                  @default(0)
+  activatedAt        DateTime?
+  discountEndsAt     DateTime?
+  restoredAt         DateTime?
+  lastError          String?
+  createdAt          DateTime             @default(now())
+  charges            BillingOfferCharge[]
+  creator            Creator              @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  offer              BillingOffer?        @relation(fields: [offerId], references: [id])
+
+  @@index([creatorId, product, status])
+  @@index([status, discountEndsAt])
+}
+
+model BillingOfferCharge {
+  id             String                   @id @default(uuid())
+  subscriptionId String
+  reference      String                   @unique
+  paidAt         DateTime
+  amountNgn      Int
+  subscription   BillingOfferSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+}
+
+model BillingOfferRedemption {
+  id             String       @id @default(uuid())
+  offerId        String
+  creatorId      String
+  product        String
+  billingCycle   BillingCycle
+  activatedAt    DateTime
+  discountEndsAt DateTime
+  paidCycles     Int          @default(0)
+  maxCycles      Int
+  creator        Creator      @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  offer          BillingOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  @@unique([offerId, creatorId, product])
+}
+
+model BillingBenefitNotification {
+  id            String    @id
+  creatorId     String
+  offerId       String?
+  event         String
+  payload       Json
+  status        String    @default("PENDING")
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime  @default(now())
+  claimedAt     DateTime?
+  sentAt        DateTime?
+  providerId    String?
+  lastError     String?
+  createdAt     DateTime  @default(now())
+  creator       Creator   @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@index([offerId])
+}
+
+model PaymentRevenueSyncState {
+  id           String    @id
+  scanFrom     DateTime?
+  scanTo       DateTime?
+  nextPage     Int       @default(1)
+  lastSyncedAt DateTime?
+  leaseUntil   DateTime?
+  leaseToken   String?
+  lastError    String?
+  updatedAt    DateTime  @updatedAt
+}
+
+model PaymentRevenueSyncIssue {
+  id          String    @id
+  integration String
+  reference   String
+  reason      String
+  attempts    Int       @default(1)
+  resolvedAt  DateTime?
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([integration, reference])
+  @@index([integration, resolvedAt, updatedAt])
+}
+
+model PaymentRevenueReceipt {
+  reference       String   @id
+  integration     String
+  amountKobo      BigInt
+  currency        String
+  paidAt          DateTime
+  tool            String   @default("unattributed")
+  creatorId       String?
+  paymentRecordId String?
+  verifiedAt      DateTime @updatedAt
+
+  @@index([paidAt])
+  @@index([tool, paidAt])
+  @@index([creatorId])
+}
+
+model TikTokAccountRuntime {
+  accountId     String    @id
+  creatorNextAt DateTime?
+  initNextAt    DateTime?
+  statusNextAt  DateTime?
+}
+
+model CalendarTeamActivity {
+  id             String         @id @default(uuid())
+  calendarId     String
+  actorCreatorId String
+  actorName      String
+  action         String
+  targetEmail    String
+  details        Json?
+  createdAt      DateTime       @default(now())
+  calendar       SocialCalendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+
+  @@index([calendarId, createdAt])
+}
+
+enum SubscriptionTier {
+  FREE
+  STARTER
+  GROWTH
+  UNLIMITED
+}
+
+enum ContentWorkspaceStorageReservationStatus {
+  PENDING
+  COMPLETED
+  RELEASED
+}
+
+enum BillingCycle {
+  MONTHLY
+  ANNUAL
+}
+
+enum ContentWorkspacePlan {
+  CREATOR
+  STUDIO
+  UNLIMITED
+}
+
+enum PartnerStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+  SUSPENDED
+}
+
+enum DeliveryStatus {
+  DELIVERED
+  APPROVED
+  PAID
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
+enum ManagedProjectStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum PartnerPayoutStatus {
+  PENDING
+  APPROVED
+  PAID
+  REJECTED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum InternalReviewStatus {
+  PENDING
+  APPROVED
+  NEEDS_CHANGES
+}
+
+enum MediaType {
+  PHOTO
+  VIDEO
+  DOCUMENT
+  PDF
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  NEEDS_REVISION
+}
+
+enum AccountType {
+  CREATOR
+  AGENCY
+  SOCIAL_MEDIA_MANAGER
+}
+
+enum PortfolioBillingStatus {
+  PENDING_SETUP
+  ACTIVE
+  OFFLINE
+}
+
+enum PartnerReferralStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  DISQUALIFIED
+}
+
+enum PartnerCommissionStatus {
+  PENDING
+  APPROVED
+  PAID
+  VOIDED
+}
+
+enum PaymentType {
+  PROJECT_ONE_TIME
+  PORTFOLIO_ONE_TIME
+  SUBSCRIPTION_INITIAL
+  SUBSCRIPTION_RENEWAL
+  PORTFOLIO_SUBSCRIPTION_INITIAL
+  PORTFOLIO_SUBSCRIPTION_RENEWAL
+  CALENDAR_SUBSCRIPTION_INITIAL
+  CALENDAR_SUBSCRIPTION_RENEWAL
+  AI_ASSISTANT_SUBSCRIPTION_INITIAL
+  AI_ASSISTANT_SUBSCRIPTION_RENEWAL
+  CONTENT_WORKSPACE_SUBSCRIPTION_INITIAL
+  CONTENT_WORKSPACE_SUBSCRIPTION_RENEWAL
+}
+
+enum CalendarPlanStatus {
+  BUILDING
+  AWAITING_APPROVAL
+  PLAN_APPROVED
+  PLAN_NEEDS_CHANGES
+}
+
+enum CalendarAccountType {
+  INDIVIDUAL
+  COMPANY
+}
+
+enum CalendarBillingStatus {
+  PENDING_SETUP
+  TRIAL
+  ACTIVE
+  OFFLINE
+}
+
+enum SocialPlatform {
+  WHATSAPP
+  INSTAGRAM
+  TIKTOK
+  YOUTUBE
+  FACEBOOK
+  X
+  LINKEDIN
+}
+
+enum SocialConnectionStatus {
+  CONNECTED
+  NEEDS_REAUTH
+  DISCONNECTED
+}
+
+enum PublishedSocialPostStatus {
+  PUBLISHED
+  UNAVAILABLE
+  FAILED
+}
+
+enum ReportingInsightType {
+  WHAT_WORKED
+  UNDERPERFORMED
+  TREND
+  RECOMMENDATION
+}
+
+enum SocialLeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  CUSTOMER
+  NOT_A_LEAD
+}
+
+enum CalendarLeadTemperature {
+  COLD
+  WARM
+  HOT
+}
+
+enum CalendarLeadPipelineStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  CUSTOMER
+  LOST
+}
+
+enum CalendarLeadSource {
+  SOCIAL
+  MANUAL
+  IMPORT
+}
+
+enum SocialInboxMessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum SocialInboxMessageStatus {
+  RECEIVED
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum InstagramPublishStatus {
+  NOT_SCHEDULED
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+}
+
+enum TikTokPublishStatus {
+  NOT_SCHEDULED
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+}
+
+enum TikTokPrivacyLevel {
+  PUBLIC_TO_EVERYONE
+  MUTUAL_FOLLOW_FRIENDS
+  FOLLOWER_OF_CREATOR
+  SELF_ONLY
+}
+
+enum PostApprovalStatus {
+  PENDING
+  APPROVED
+  NEEDS_REVISION
+}
+
+enum CalendarRole {
+  MANAGER
+  SOCIAL_MEDIA_MANAGER
+  CREATIVE_CONTRIBUTOR
+  INBOX_AGENT
+  VIEWER
+  VIEW_ONLY
+  ADD_CONTENT
+  EDIT_CALENDAR
+}
