@@ -3,71 +3,57 @@ import type { BackgroundJobData } from '../../lib/queues/backgroundQueue';
 import { enqueuePublishJob } from '../../lib/queues/publishingQueue';
 import { db } from '../../lib/db';
 import { PUBLISHING_PLATFORMS, statusWhere } from '../../lib/publishing/state';
+import { syncSocialInboxes } from '../../lib/socialMessaging/x';
+import { processSocialInboxAutoReplies } from '../../lib/socialMessaging/autoReply';
+import { syncConnectedSocialReporting } from '../../lib/reporting/sync';
+import { reconcileOfferExpirations } from '../../lib/billingOffers';
+import { runCalendarTrialEmailCheck } from '../../lib/calendarTrialEmails';
 
 export async function processBackgroundJob(job: Job<BackgroundJobData>) {
   const { jobType } = job.data;
   console.log(`[BullMQ Background] Executing background task: ${jobType}`);
 
-  if (jobType === 'scheduled-publishing-scanner') {
-    return await scanAndEnqueueScheduledPosts();
-  }
-
-  // API-triggered cron jobs
-  const siteUrl = (
-    process.env.URL ||
-    process.env.DEPLOY_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    'http://localhost:3000'
-  ).replace(/\/$/, '');
-  const secret = process.env.CRON_SECRET;
-
-  if (!secret) {
-    console.warn('[BullMQ Background] CRON_SECRET is not configured in .env. Skipping HTTP cron dispatch.');
-    return { skipped: true, reason: 'CRON_SECRET_MISSING' };
-  }
-
-  const endpointMap: Record<string, string> = {
-    'social-inbox-sync': '/api/cron/social-inbox-sync',
-    'social-inbox-auto-replies': '/api/cron/social-inbox-auto-replies',
-    'reporting-sync': '/api/cron/reporting-sync',
-    'billing-offers': '/api/cron/billing-offers',
-    'calendar-trial-emails': '/api/cron/calendar-trial-emails',
-  };
-
-  const endpoint = endpointMap[jobType];
-  if (!endpoint) {
-    console.warn(`[BullMQ Background] Unknown background task: ${jobType}`);
-    return { skipped: true, reason: 'UNKNOWN_JOB_TYPE' };
-  }
-
-  const url = `${siteUrl}${endpoint}`;
   try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${secret}`,
-        'Content-Type': 'application/json',
-      },
-      signal: AbortSignal.timeout(60_000),
-    });
+    switch (jobType) {
+      case 'scheduled-publishing-scanner':
+        return await scanAndEnqueueScheduledPosts();
 
-    const status = res.status;
-    let data: unknown;
-    try {
-      data = await res.json();
-    } catch {
-      data = await res.text();
+      case 'social-inbox-sync': {
+        const summary = await syncSocialInboxes();
+        console.log('[BullMQ Background] social-inbox-sync finished:', summary);
+        return { success: true, summary };
+      }
+
+      case 'social-inbox-auto-replies': {
+        const summary = await processSocialInboxAutoReplies();
+        console.log('[BullMQ Background] social-inbox-auto-replies finished:', summary);
+        return { success: true, summary };
+      }
+
+      case 'reporting-sync': {
+        const summary = await syncConnectedSocialReporting();
+        console.log('[BullMQ Background] reporting-sync finished:', summary);
+        return { success: true, summary };
+      }
+
+      case 'billing-offers': {
+        const summary = await reconcileOfferExpirations();
+        console.log('[BullMQ Background] billing-offers finished:', summary);
+        return { success: true, summary };
+      }
+
+      case 'calendar-trial-emails': {
+        const summary = await runCalendarTrialEmailCheck();
+        console.log('[BullMQ Background] calendar-trial-emails finished:', summary);
+        return { success: true, summary };
+      }
+
+      default:
+        console.warn(`[BullMQ Background] Unknown background task: ${jobType}`);
+        return { skipped: true, reason: 'UNKNOWN_JOB_TYPE' };
     }
-
-    if (!res.ok) {
-      console.error(`[BullMQ Background] ${jobType} returned ${status}:`, data);
-      throw new Error(`${jobType} failed with status ${status}`);
-    }
-
-    console.log(`[BullMQ Background] ${jobType} completed successfully (status ${status}):`, data);
-    return { success: true, status, data };
   } catch (err) {
-    console.error(`[BullMQ Background] ${jobType} error connecting to ${url}:`, err);
+    console.error(`[BullMQ Background] Error executing ${jobType}:`, err);
     throw err;
   }
 }
