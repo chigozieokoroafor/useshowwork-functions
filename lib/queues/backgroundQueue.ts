@@ -10,7 +10,12 @@ export interface BackgroundJobData {
     | 'reporting-sync'
     | 'billing-offers'
     | 'calendar-trial-emails'
-    | 'scheduled-publishing-scanner';
+    | 'scheduled-publishing-scanner'
+    | 'ai-research'
+    | 'billing-benefit-emails'
+    | 'content-workspace-storage'
+    | 'lifecycle-emails'
+    | 'payment-revenue';
   metadata?: Record<string, unknown>;
 }
 
@@ -42,12 +47,17 @@ export async function registerRepeatableBackgroundJobs() {
   const queue = getBackgroundQueue();
 
   const schedules: Array<{ jobType: BackgroundJobData['jobType']; pattern: string }> = [
-    { jobType: 'scheduled-publishing-scanner', pattern: '* * * * *' }, // every minute
+    { jobType: 'scheduled-publishing-scanner', pattern: '* * * * *' },   // every minute
+    { jobType: 'billing-benefit-emails', pattern: '* * * * *' },         // every minute
     { jobType: 'social-inbox-auto-replies', pattern: '*/2 * * * *' },    // every 2 mins
     { jobType: 'social-inbox-sync', pattern: '*/5 * * * *' },           // every 5 mins
     { jobType: 'billing-offers', pattern: '*/15 * * * *' },             // every 15 mins
-    { jobType: 'calendar-trial-emails', pattern: '0 9 * * *' },         // daily 9 AM
+    { jobType: 'payment-revenue', pattern: '*/15 * * * *' },            // every 15 mins
     { jobType: 'reporting-sync', pattern: '17 2 * * *' },               // daily 2:17 AM
+    { jobType: 'ai-research', pattern: '0 3 * * *' },                   // daily 3:00 AM
+    { jobType: 'calendar-trial-emails', pattern: '0 9 * * *' },         // daily 9:00 AM
+    { jobType: 'content-workspace-storage', pattern: '0 0 * * *' },     // daily midnight
+    { jobType: 'lifecycle-emails', pattern: '0 0 * * *' },              // daily midnight
   ];
 
   for (const { jobType, pattern } of schedules) {

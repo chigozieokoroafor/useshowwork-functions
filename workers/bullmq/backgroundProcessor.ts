@@ -8,6 +8,12 @@ import { processSocialInboxAutoReplies } from '../../lib/socialMessaging/autoRep
 import { syncConnectedSocialReporting } from '../../lib/reporting/sync';
 import { reconcileOfferExpirations } from '../../lib/billingOffers';
 import { runCalendarTrialEmailCheck } from '../../lib/calendarTrialEmails';
+import { runScheduledAiBusinessResearch } from '../../lib/aiResearchScheduler';
+import { deliverBenefitEmails } from '../../lib/billingBenefitNotifications';
+import { cleanupExpiredContentWorkspaceStorageReservations } from '../../lib/contentWorkspaceUsage';
+import { cleanupTikTokPreparedFiles } from '../../lib/r2';
+import { runLifecycleEmailCheck } from '../../lib/lifecycleEmails';
+import { reconcilePaymentBatch } from '../../lib/paymentReconciliation';
 
 export async function processBackgroundJob(job: Job<BackgroundJobData>) {
   const { jobType } = job.data;
@@ -45,6 +51,38 @@ export async function processBackgroundJob(job: Job<BackgroundJobData>) {
       case 'calendar-trial-emails': {
         const summary = await runCalendarTrialEmailCheck();
         console.log('[BullMQ Background] calendar-trial-emails finished:', summary);
+        return { success: true, summary };
+      }
+
+      case 'ai-research': {
+        const summary = await runScheduledAiBusinessResearch();
+        console.log('[BullMQ Background] ai-research finished:', summary);
+        return { success: true, summary };
+      }
+
+      case 'billing-benefit-emails': {
+        const summary = await deliverBenefitEmails();
+        console.log('[BullMQ Background] billing-benefit-emails finished:', summary);
+        return { success: true, summary };
+      }
+
+      case 'content-workspace-storage': {
+        const storageSummary = await cleanupExpiredContentWorkspaceStorageReservations();
+        const preparedMedia = await cleanupTikTokPreparedFiles();
+        const summary = { ...storageSummary, preparedMedia };
+        console.log('[BullMQ Background] content-workspace-storage finished:', summary);
+        return { success: true, summary };
+      }
+
+      case 'lifecycle-emails': {
+        const summary = await runLifecycleEmailCheck();
+        console.log('[BullMQ Background] lifecycle-emails finished:', summary);
+        return { success: true, summary };
+      }
+
+      case 'payment-revenue': {
+        const summary = await reconcilePaymentBatch();
+        console.log('[BullMQ Background] payment-revenue finished:', summary);
         return { success: true, summary };
       }
 
