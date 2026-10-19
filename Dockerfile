@@ -65,5 +65,5 @@ USER bun
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD bun run dist-worker-native/run-bullmq.cjs --check || exit 1
 
-# Start the BullMQ worker
-CMD ["bun", "run", "dist-worker-native/run-bullmq.cjs", "--run"]
+# Run prestart (e.g. database schema sync/pull) before starting the BullMQ worker
+CMD ["sh", "-c", "bun run prestart && bun run dist-worker-native/run-bullmq.cjs --run"]

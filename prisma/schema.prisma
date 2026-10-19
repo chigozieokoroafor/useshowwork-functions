@@ -1517,6 +1517,22 @@ model CalendarTeamActivity {
   @@index([calendarId, createdAt])
 }
 
+model AiGenerationJob {
+  id          String    @id
+  calendarId  String
+  creatorId   String
+  status      String    @default("PENDING")
+  payload     Json
+  result      Json?
+  error       String?
+  createdAt   DateTime  @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  @@index([calendarId], map: "idx_ai_gen_job_calendar")
+  @@index([status, createdAt], map: "idx_ai_gen_job_status")
+}
+
 enum SubscriptionTier {
   FREE
   STARTER

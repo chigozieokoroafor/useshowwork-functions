@@ -9,7 +9,7 @@ import { CONTENT_GENERATION_QUEUE_NAME, type ContentGenerationJobData, enqueueCo
 import { processPublishJob } from './publishingProcessor';
 import { processBackgroundJob } from './backgroundProcessor';
 import { processContentGenerationJob } from './contentGenerationProcessor';
-import { claimNextPendingAiGenerationJob } from '../../lib/aiGenerationJob';
+import { claimNextPendingAiGenerationJob, ensureAiGenerationJobTable } from '../../lib/aiGenerationJob';
 import { db } from '../../lib/db';
 
 async function main() {
@@ -146,6 +146,13 @@ async function main() {
   contentGenerationWorker.on('error', (err) => {
     console.error('[BullMQ AI Gen] Worker error:', err);
   });
+
+  // Ensure AiGenerationJob table exists in PostgreSQL
+  try {
+    await ensureAiGenerationJobTable();
+  } catch (err) {
+    console.error('[BullMQ] Warning: Failed to bootstrap AiGenerationJob table:', err);
+  }
 
   // Register repeatable background cron jobs in Redis
   try {
