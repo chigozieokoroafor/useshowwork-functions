@@ -3,18 +3,19 @@
   "version": "1.0.0",
   "private": true,
   "description": "Showwork standalone publishing worker, background jobs, and Netlify function runners",
-  "main": "dist-worker-native/run.cjs",
+  "main": "dist-worker-native/run-bullmq.cjs",
   "scripts": {
-    "worker:build": "node scripts/vps/build-native-worker.mjs",
-    "worker:check": "node dist-worker-native/run.cjs --check",
-    "worker:run": "node dist-worker-native/run.cjs --run",
-    "worker:reconcile": "node dist-worker-native/run.cjs --reconcile",
+    "worker:build": "node scripts/vps/build-bullmq-worker.mjs",
+    "worker:check": "node dist-worker-native/run-bullmq.cjs --check",
+    "worker:run": "node dist-worker-native/run-bullmq.cjs --run",
+    "worker:reconcile": "node dist-worker-native/run-bullmq.cjs --reconcile",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "postinstall": "prisma generate",
     "prestart": "npx prisma db pull",
     "worker:bullmq:build": "node scripts/vps/build-bullmq-worker.mjs",
     "worker:bullmq": "node dist-worker-native/run-bullmq.cjs --run",
-    "worker:bullmq:check": "node dist-worker-native/run-bullmq.cjs --check"
+    "worker:bullmq:check": "node dist-worker-native/run-bullmq.cjs --check",
+    "start": "node dist-worker-native/run-bullmq.cjs --run"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.658.0",
