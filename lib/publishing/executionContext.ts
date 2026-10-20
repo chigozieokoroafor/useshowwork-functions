@@ -42,7 +42,7 @@ export async function publishingFetch(input: string | URL | Request, init?: Requ
     legacyUrl.hostname === "api.x.com" && legacyUrl.pathname === "/2/tweets" ||
     legacyUrl.hostname === "api.linkedin.com" && legacyUrl.pathname === "/rest/posts" ||
     legacyUrl.hostname === "open.tiktokapis.com" && /\/post\/publish\/(content|video)\/init\/?$/.test(legacyUrl.pathname);
-  if (legacyMutation && retiredCreation) throw Error(auxiliary.getStore() ? "ACCOUNT_IO_ENDPOINT_DENIED" : "LEGACY_PUBLICATION_TRANSPORT_RETIRED");
+  if (auxiliary.getStore() && legacyMutation && retiredCreation) throw Error("ACCOUNT_IO_ENDPOINT_DENIED");
   const accountIO=auxiliary.getStore();
   if(accountIO){
     const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url),method=(init?.method??(input instanceof Request?input.method:'GET')).toUpperCase();
