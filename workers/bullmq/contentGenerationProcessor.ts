@@ -1,30 +1,45 @@
-import { Job } from 'bullmq';
-import { db } from '../../lib/db';
-import { generateContentCalendar } from '../../lib/openai';
-import { updateAiGenerationJob } from '../../lib/aiGenerationJob';
-import type { ContentGenerationJobData } from '../../lib/queues/contentGenerationQueue';
-import type { SocialPlatform } from '@prisma/client';
+import { Job } from "bullmq";
+import { db } from "../../lib/db";
+import { generateContentCalendar } from "../../lib/openai";
+import { updateAiGenerationJob } from "../../lib/aiGenerationJob";
+import type { ContentGenerationJobData } from "../../lib/queues/contentGenerationQueue";
+import type { SocialPlatform } from "@prisma/client";
 
 const TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function isRealDate(value: unknown): value is string {
-  if (typeof value !== 'string' || !DATE_RE.test(value)) return false;
+  if (typeof value !== "string" || !DATE_RE.test(value)) return false;
   const date = new Date(`${value}T00:00:00.000Z`);
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
 export async function processContentGenerationJob(job: Job<ContentGenerationJobData>) {
-  const { jobId, calendarId, creatorId, payload } = job.data;
+  const { jobId, calendarId, creatorId } = job.data;
   console.log(`[BullMQ AI Gen] Starting generation job ${jobId} for calendar ${calendarId}...`);
 
-  await updateAiGenerationJob(jobId, { status: 'PROCESSING', startedAt: new Date() });
+  await updateAiGenerationJob(jobId, { status: "PROCESSING", startedAt: new Date() });
 
   try {
     const calendar = await db.socialCalendar.findUnique({ where: { id: calendarId } });
-    if (!calendar) throw new Error('Calendar not found');
+    if (!calendar) throw new Error("Calendar not found");
     if (!calendar.aiBusinessSummary?.trim()) {
-      throw new Error('Upload at least one business document first, so the AI understands what to create content about');
+      throw new Error("Upload at least one business document first, so the AI understands what to create content about");
+    }
+
+    // Resolve payload safely from job data (supports both "payload" and "request" schemas) or fallback to DB record
+    let payload = job.data.payload ?? (job.data as any).request;
+    if (!payload || typeof payload !== "object" || Object.keys(payload).length === 0) {
+      const dbJob = await db.aiGenerationJob.findUnique({
+        where: { id: jobId },
+      }).catch(() => null);
+      if (dbJob) {
+        payload = (dbJob.payload as any) ?? (dbJob.request as any);
+      }
+    }
+
+    if (!payload || typeof payload !== "object") {
+      throw new Error("Missing generation input payload.");
     }
 
     const {
@@ -39,18 +54,22 @@ export async function processContentGenerationJob(job: Job<ContentGenerationJobD
       platformSchedules,
     } = payload;
 
-    const schedules = platformSchedules && typeof platformSchedules === 'object' ? platformSchedules : {};
+    if (!startDate || !endDate) {
+      throw new Error("Missing required generation dates: startDate and endDate must be specified.");
+    }
 
-    console.log(`[BullMQ AI Gen] Calling OpenAI for calendar ${calendarId} (range: ${startDate} to ${endDate}, platforms: ${platforms?.join(', ') || 'none'})...`);
+    const schedules = platformSchedules && typeof platformSchedules === "object" ? platformSchedules : {};
+
+    console.log(`[BullMQ AI Gen] Calling OpenAI for calendar ${calendarId} (range: ${startDate} to ${endDate}, platforms: ${platforms?.join(", ") || "none"})...`);
 
     const ideas = await generateContentCalendar({
       clientName: calendar.clientName,
       businessSummary: calendar.aiBusinessSummary,
       startDate,
       endDate,
-      postsPerWeek: typeof postsPerWeek === 'number' ? postsPerWeek : 3,
-      platforms: platforms as SocialPlatform[],
-      customInstructions: typeof customInstructions === 'string' && customInstructions.trim() ? customInstructions.trim() : undefined,
+      postsPerWeek: typeof postsPerWeek === "number" ? postsPerWeek : 3,
+      platforms: (platforms || []) as SocialPlatform[],
+      customInstructions: typeof customInstructions === "string" && customInstructions.trim() ? customInstructions.trim() : undefined,
       contentStrategy: contentStrategy,
       contentGroups: contentGroups,
       scheduleStrategy: scheduleStrategy,
@@ -58,13 +77,13 @@ export async function processContentGenerationJob(job: Job<ContentGenerationJobD
     });
 
     if (!ideas || ideas.length === 0) {
-      throw new Error('The AI returned no content. Please try again.');
+      throw new Error("The AI returned no content. Please try again.");
     }
 
     const rows = ideas.map((idea) => {
-      if (!isRealDate(idea.postDate)) throw new Error('Generated content contains an invalid date.');
-      const postTime = schedules[idea.platform]?.time ?? '09:00';
-      if (typeof postTime !== 'string' || !TIME_RE.test(postTime)) throw new Error(`Invalid time for ${idea.platform}`);
+      if (!isRealDate(idea.postDate)) throw new Error("Generated content contains an invalid date.");
+      const postTime = schedules[idea.platform]?.time ?? "09:00";
+      if (typeof postTime !== "string" || !TIME_RE.test(postTime)) throw new Error(`Invalid time for ${idea.platform}`);
       const postDate = new Date(`${idea.postDate}T${postTime}:00.000Z`);
       if (!Number.isFinite(postDate.getTime())) throw new Error(`Invalid timestamp for ${idea.platform}`);
 
@@ -96,11 +115,13 @@ export async function processContentGenerationJob(job: Job<ContentGenerationJobD
       created: posts.length,
       postIds: posts.map((p) => p.id),
       posts,
+      httpStatus: 200,
     };
 
     await updateAiGenerationJob(jobId, {
-      status: 'COMPLETED',
+      status: "COMPLETED",
       result,
+      httpStatus: 200,
       completedAt: new Date(),
     });
 
@@ -108,7 +129,10 @@ export async function processContentGenerationJob(job: Job<ContentGenerationJobD
     return result;
   } catch (error: any) {
     console.error(`[BullMQ AI Gen] Job ${jobId} failed:`, error);
-    const message = error instanceof Error ? error.message : 'Failed to generate content';
+    const message = error instanceof Error ? error.message : "Failed to generate content";
+    const status = typeof error?.status === "number" && error.status >= 400 && error.status < 600
+      ? error.status
+      : 500;
 
     // Refund AI generation count
     try {
@@ -120,12 +144,20 @@ export async function processContentGenerationJob(job: Job<ContentGenerationJobD
         });
       }
     } catch (refundError) {
-      console.error('[BullMQ AI Gen] Failed to refund usage:', refundError);
+      console.error("[BullMQ AI Gen] Failed to refund usage:", refundError);
     }
 
-    await updateAiGenerationJob(jobId, {
-      status: 'FAILED',
+    const errorResult = {
       error: message,
+      httpStatus: status,
+      failedAt: new Date().toISOString(),
+    };
+
+    await updateAiGenerationJob(jobId, {
+      status: "FAILED",
+      error: message,
+      result: errorResult,
+      httpStatus: status,
       completedAt: new Date(),
     });
 

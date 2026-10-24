@@ -8,6 +8,7 @@ export interface ContentGenerationJobData {
   calendarId: string;
   creatorId: string;
   payload: any;
+  request?: any;
 }
 
 let contentGenerationQueue: Queue<ContentGenerationJobData> | null = null;

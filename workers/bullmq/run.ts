@@ -1,56 +1,58 @@
-import dotenv from 'dotenv';
-dotenv.config();
+import "dotenv/config";
 
-import { Worker } from 'bullmq';
-import { getRedisConnection, getSharedRedisClient } from '../../lib/redis';
-import { PUBLISHING_QUEUE_NAME, type PublishJobData } from '../../lib/queues/publishingQueue';
-import { BACKGROUND_QUEUE_NAME, type BackgroundJobData, registerRepeatableBackgroundJobs } from '../../lib/queues/backgroundQueue';
-import { CONTENT_GENERATION_QUEUE_NAME, type ContentGenerationJobData, enqueueContentGenerationJob } from '../../lib/queues/contentGenerationQueue';
-import { processPublishJob } from './publishingProcessor';
-import { processBackgroundJob } from './backgroundProcessor';
-import { processContentGenerationJob } from './contentGenerationProcessor';
-import { claimNextPendingAiGenerationJob, ensureAiGenerationJobTable } from '../../lib/aiGenerationJob';
-import { db } from '../../lib/db';
+import { Worker } from "bullmq";
+import { getRedisConnection, getSharedRedisClient } from "../../lib/redis";
+import { PUBLISHING_QUEUE_NAME, type PublishJobData } from "../../lib/queues/publishingQueue";
+import { BACKGROUND_QUEUE_NAME, type BackgroundJobData, registerRepeatableBackgroundJobs } from "../../lib/queues/backgroundQueue";
+import { CONTENT_GENERATION_QUEUE_NAME, type ContentGenerationJobData, enqueueContentGenerationJob } from "../../lib/queues/contentGenerationQueue";
+import { processPublishJob } from "./publishingProcessor";
+import { processBackgroundJob } from "./backgroundProcessor";
+import { processContentGenerationJob } from "./contentGenerationProcessor";
+import { claimNextPendingAiGenerationJob, ensureAiGenerationJobTable } from "../../lib/aiGenerationJob";
+import { db } from "../../lib/db";
 
 async function main() {
-  const nodeMajor = Number(process.versions.node.split('.')[0]);
+  const nodeMajor = Number(process.versions.node.split(".")[0]);
   if (nodeMajor !== 22 && nodeMajor !== 25) {
-    console.warn(`[BullMQ Worker] Warning: running on Node ${process.versions.node}. Supported versions: 22, 25.`);
+    console.warn(`[Showwork Workers] Warning: running on Node ${process.versions.node}. Supported versions: 22, 25.`);
   }
 
   const args = process.argv.slice(2);
-  const command = args[0] || '--run';
+  const command = args[0] || "--run";
 
-  if (!['--run', '--check', '--reconcile'].includes(command)) {
-    console.error('Invalid command. Usage: node run-bullmq.cjs [--run | --check | --reconcile]');
+  if (!["--run", "--check", "--reconcile"].includes(command)) {
+    console.error("Invalid command. Usage: node run-workers.mjs [--run | --check | --reconcile]");
     process.exit(1);
   }
 
-  // Check health mode
-  if (command === '--check') {
+  // Health check mode
+  if (command === "--check") {
     let redisOk = false;
     let dbOk = false;
+    const openaiOk = Boolean(process.env.OPENAI_API_KEY);
 
     try {
       const redis = getSharedRedisClient();
       const pong = await redis.ping();
-      redisOk = pong === 'PONG';
+      redisOk = pong === "PONG";
     } catch (err) {
-      console.error('[BullMQ Health] Redis check failed:', err);
+      console.error("[Health] Redis check failed:", err);
     }
 
     try {
       await db.$queryRaw`SELECT 1`;
       dbOk = true;
     } catch (err) {
-      console.error('[BullMQ Health] Database check failed:', err);
+      console.error("[Health] Database check failed:", err);
     }
 
     const health = {
-      system: 'bullmq-worker',
-      status: redisOk && dbOk ? 'healthy' : 'unhealthy',
-      redis: redisOk ? 'connected' : 'disconnected',
-      database: dbOk ? 'connected' : 'disconnected',
+      system: "all-workers",
+      status: redisOk && dbOk ? "healthy" : "unhealthy",
+      redis: redisOk ? "connected" : "disconnected",
+      database: dbOk ? "connected" : "disconnected",
+      openai: openaiOk ? "configured" : "missing",
+      workers: ["publishing", "background", "content-generation", "ai-polling"],
       nodeVersion: process.versions.node,
       timestamp: new Date().toISOString(),
     };
@@ -60,22 +62,27 @@ async function main() {
   }
 
   // Reconcile mode: single scan for due posts
-  if (command === '--reconcile') {
-    console.log('[BullMQ] Running one-off scheduled posts reconciliation...');
+  if (command === "--reconcile") {
+    console.log("[Workers] Running one-off scheduled posts reconciliation...");
     const result = await processBackgroundJob({
-      id: 'manual-reconcile',
-      name: 'scheduled-publishing-scanner',
-      data: { jobType: 'scheduled-publishing-scanner' },
+      id: "manual-reconcile",
+      name: "scheduled-publishing-scanner",
+      data: { jobType: "scheduled-publishing-scanner" },
     } as any);
-    console.log('[BullMQ] Reconciliation complete:', result);
+    console.log("[Workers] Reconciliation complete:", result);
     process.exit(0);
   }
 
-  // --run mode
-  console.log('====================================================');
-  console.log('       SHOWWORK BULLMQ WORKER SERVICE               ');
-  console.log('====================================================');
+  // --run mode (Unified All-Workers Service)
+  console.log("====================================================");
+  console.log("       SHOWWORK UNIFIED WORKER SERVICE              ");
+  console.log("  (Publishing, Background Crons & AI Content Gen)   ");
+  console.log("====================================================");
   console.log(`Node: ${process.versions.node} | Time: ${new Date().toISOString()}`);
+
+  if (!process.env.OPENAI_API_KEY) {
+    console.warn("[Workers] Warning: OPENAI_API_KEY is not configured. AI content generation jobs will fail.");
+  }
 
   const concurrency = process.env.PUBLISHING_WORKER_CONCURRENCY
     ? parseInt(process.env.PUBLISHING_WORKER_CONCURRENCY, 10)
@@ -91,7 +98,7 @@ async function main() {
     }
   );
 
-  console.log('Starting Background Tasks Worker (Concurrency: 2)...');
+  console.log("Starting Background Tasks Worker (Concurrency: 2)...");
   const backgroundWorker = new Worker<BackgroundJobData>(
     BACKGROUND_QUEUE_NAME,
     processBackgroundJob,
@@ -101,7 +108,7 @@ async function main() {
     }
   );
 
-  console.log('Starting Content Generation Worker (Concurrency: 2)...');
+  console.log("Starting Content Generation Worker (Concurrency: 2)...");
   const contentGenerationWorker = new Worker<ContentGenerationJobData>(
     CONTENT_GENERATION_QUEUE_NAME,
     processContentGenerationJob,
@@ -111,83 +118,106 @@ async function main() {
     }
   );
 
-  publishingWorker.on('completed', (job) => {
-    console.log(`[BullMQ Publishing] Job ${job.id} completed! (Post: ${job.data.postId}, Platform: ${job.data.platform})`);
+  publishingWorker.on("completed", (job) => {
+    console.log(`[Publishing Worker] Job ${job.id} completed! (Post: ${job.data.postId}, Platform: ${job.data.platform})`);
   });
 
-  publishingWorker.on('failed', (job, err) => {
-    console.error(`[BullMQ Publishing] Job ${job?.id} failed: ${err.message}`);
+  publishingWorker.on("failed", (job, err) => {
+    console.error(`[Publishing Worker] Job ${job?.id} failed: ${err.message}`);
   });
 
-  publishingWorker.on('error', (err) => {
-    console.error('[BullMQ Publishing] Worker error:', err);
+  publishingWorker.on("error", (err) => {
+    console.error("[Publishing Worker] Worker error:", err);
   });
 
-  backgroundWorker.on('completed', (job) => {
-    console.log(`[BullMQ Background] Task ${job.name} (ID: ${job.id}) finished.`);
+  backgroundWorker.on("completed", (job) => {
+    console.log(`[Background Worker] Task ${job.name} (ID: ${job.id}) finished.`);
   });
 
-  backgroundWorker.on('failed', (job, err) => {
-    console.error(`[BullMQ Background] Task ${job?.name} failed: ${err.message}`);
+  backgroundWorker.on("failed", (job, err) => {
+    console.error(`[Background Worker] Task ${job?.name} failed: ${err.message}`);
   });
 
-  backgroundWorker.on('error', (err) => {
-    console.error('[BullMQ Background] Worker error:', err);
+  backgroundWorker.on("error", (err) => {
+    console.error("[Background Worker] Worker error:", err);
   });
 
-  contentGenerationWorker.on('completed', (job) => {
-    console.log(`[BullMQ AI Gen] Job ${job.id} finished for calendar ${job.data.calendarId}.`);
+  contentGenerationWorker.on("completed", (job) => {
+    console.log(`[AI Content Gen] Job ${job.id} finished for calendar ${job.data.calendarId}.`);
   });
 
-  contentGenerationWorker.on('failed', (job, err) => {
-    console.error(`[BullMQ AI Gen] Job ${job?.id} failed: ${err.message}`);
+  contentGenerationWorker.on("failed", (job, err) => {
+    console.error(`[AI Content Gen] Job ${job?.id} failed: ${err.message}`);
   });
 
-  contentGenerationWorker.on('error', (err) => {
-    console.error('[BullMQ AI Gen] Worker error:', err);
+  contentGenerationWorker.on("error", (err) => {
+    console.error("[AI Content Gen] Worker error:", err);
   });
 
-  // Ensure AiGenerationJob table exists in PostgreSQL
+  // Ensure table schema
   try {
     await ensureAiGenerationJobTable();
   } catch (err) {
-    console.error('[BullMQ] Warning: Failed to bootstrap AiGenerationJob table:', err);
+    console.error("[Workers] Table schema check note:", err);
   }
 
   // Register repeatable background cron jobs in Redis
   try {
     await registerRepeatableBackgroundJobs();
   } catch (err) {
-    console.error('[BullMQ] Warning: Failed to register repeatable crons:', err);
+    console.error("[Workers] Warning: Failed to register repeatable crons:", err);
   }
+
+  // Expire stale jobs older than 15 minutes (from dedicated AI worker logic)
+  const expireStaleJobs = async () => {
+    try {
+      const cutoff = new Date(Date.now() - 15 * 60_000);
+      const expired = await db.aiGenerationJob.updateMany({
+        where: { status: "PENDING", createdAt: { lt: cutoff } },
+        data: {
+          status: "FAILED",
+          httpStatus: 503,
+          result: { error: "AI generation could not start in time. Please try again." },
+        },
+      });
+      if (expired.count > 0) {
+        console.log(`[AI Worker] Expired ${expired.count} stale pending job(s) older than 15 minutes.`);
+      }
+    } catch {
+      // Non-intrusive cleanup
+    }
+  };
 
   // Active polling scanner to pick up pending AI generation jobs from PostgreSQL
   const aiJobInterval = setInterval(async () => {
     if (isShuttingDown) return;
     try {
+      await expireStaleJobs();
       const pendingJob = await claimNextPendingAiGenerationJob();
       if (pendingJob) {
-        console.log(`[BullMQ] Discovered pending AI generation job ${pendingJob.id} in DB, queueing...`);
+        const payload = pendingJob.payload ?? (pendingJob as any).request ?? {};
+        console.log(`[AI Worker] Claimed pending AI generation job ${pendingJob.id} from DB, queueing to BullMQ...`);
         await enqueueContentGenerationJob(pendingJob.id, {
           jobId: pendingJob.id,
           calendarId: pendingJob.calendarId,
           creatorId: pendingJob.creatorId,
-          payload: pendingJob.payload,
+          payload,
+          request: payload,
         });
       }
     } catch (err) {
-      console.error('[BullMQ] Pending AI job scanner error:', err);
+      console.error("[AI Worker] Job scanner error:", err);
     }
-  }, 3000);
+  }, 2500);
 
-  console.log('[BullMQ] All workers active and listening for jobs in Redis.');
+  console.log("[Workers] All workers active (Publishing, Background Crons, Content Generation & AI Polling).");
 
   // Graceful shutdown handling
   let isShuttingDown = false;
   const shutdown = async (signal: string) => {
     if (isShuttingDown) return;
     isShuttingDown = true;
-    console.log(`\n[BullMQ] Received ${signal}. Shutting down gracefully...`);
+    console.log(`\n[Workers] Received ${signal}. Shutting down all workers gracefully...`);
 
     try {
       clearInterval(aiJobInterval);
@@ -197,19 +227,19 @@ async function main() {
       const redis = getSharedRedisClient();
       await redis.quit();
       await db.$disconnect();
-      console.log('[BullMQ] Clean shutdown finished. Exiting.');
+      console.log("[Workers] Clean shutdown finished. Exiting.");
       process.exit(0);
     } catch (err) {
-      console.error('[BullMQ] Error during shutdown:', err);
+      console.error("[Workers] Error during shutdown:", err);
       process.exit(1);
     }
   };
 
-  process.once('SIGINT', () => shutdown('SIGINT'));
-  process.once('SIGTERM', () => shutdown('SIGTERM'));
+  process.once("SIGINT", () => shutdown("SIGINT"));
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
 }
 
 main().catch((err) => {
-  console.error('[BullMQ] Fatal startup error:', err);
+  console.error("[Workers] Fatal startup error:", err);
   process.exit(1);
 });
