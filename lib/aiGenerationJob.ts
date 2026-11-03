@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 /** Compatibility facade for older AI worker callers. The Prisma job schema is
  * authoritative: request/result/httpStatus and RUNNING, never a second table. */
 import { db } from "./db";
@@ -59,7 +60,7 @@ export async function createAiGenerationJob(params: {
   const input = params.request ?? params.payload ?? {};
   const job = await db.aiGenerationJob.create({
     data: {
-      ...(params.id ? { id: params.id } : {}),
+      id: params.id || randomUUID(),
       calendarId: params.calendarId,
       creatorId: params.creatorId,
       status: "PENDING",
