@@ -2015,6 +2015,15 @@ export async function sendPartnerWelcomeEmail({
 }
 
 
+export async function sendInboxHandoffEmail({ to, calendarId, conversationId, notificationId }: { to: string; calendarId: string; conversationId: string; notificationId: string }) {
+  const url = `${APP_URL}/dashboard/calendars/${encodeURIComponent(calendarId)}?view=inbox&conversation=${encodeURIComponent(conversationId)}`;
+  await sendEmail({ from: FROM, to, subject: "A conversation needs your team · Showwork", html: emailShell({
+    eyebrow: "Inbox · Human handoff", headline: "Your team is needed.",
+    body: "An inbox conversation needs a person. Automatic replies are paused until your team explicitly resumes them. Open Showwork to review the reason and continue the conversation. Customer messages and sensitive details are kept out of this email.",
+    ctaLabel: "Open conversation", ctaUrl: url,
+  }) }, `inbox-handoff-${notificationId}`);
+}
+
 export type BillingBenefitEmail = {
   to: string; name: string | null; title: string; event: "GRANTED" | "STOPPED";
   product: string; deliveryTier: string | null; workspacePlan: string | null;

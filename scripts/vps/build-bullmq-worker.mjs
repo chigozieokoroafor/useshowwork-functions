@@ -9,7 +9,7 @@ const nextServerShimPlugin = {
       namespace: "next-server-shim",
     }));
     build.onLoad({ filter: /.*/, namespace: "next-server-shim" }, () => ({
-      contents: "export class NextResponse { static json(data, init) { return { data, status: init?.status || 200 }; } } export class NextRequest {} export function after(fn) { if (typeof fn === 'function') fn(); }",
+      contents: "export class NextResponse { static json(data, init) { return { data, status: init?.status || 200, ok: (init?.status || 200) < 400, async json() { return data; } }; } } export class NextRequest { constructor(input, init) { this.url = typeof input === 'string' ? input : input?.url || ''; this._body = init?.body; } async json() { return typeof this._body === 'string' ? JSON.parse(this._body) : this._body; } } export function after(fn) { if (typeof fn === 'function') fn(); }",
       loader: "js",
     }));
   },

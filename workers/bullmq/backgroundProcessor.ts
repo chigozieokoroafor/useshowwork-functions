@@ -5,6 +5,7 @@ import { db } from '../../lib/db';
 import { PUBLISHING_PLATFORMS, statusWhere } from '../../lib/publishing/state';
 import { syncSocialInboxes } from '../../lib/socialMessaging/x';
 import { processSocialInboxAutoReplies } from '../../lib/socialMessaging/autoReply';
+import { deliverHandoffNotifications } from '../../lib/socialMessaging/handoffNotifications';
 import { syncConnectedSocialReporting } from '../../lib/reporting/sync';
 import { reconcileOfferExpirations } from '../../lib/billingOffers';
 import { runCalendarTrialEmailCheck } from '../../lib/calendarTrialEmails';
@@ -34,6 +35,12 @@ export async function processBackgroundJob(job: Job<BackgroundJobData>) {
         const summary = await processSocialInboxAutoReplies();
         console.log('[BullMQ Background] social-inbox-auto-replies finished:', summary);
         return { success: true, summary };
+      }
+
+      case 'inbox-handoff-notifications': {
+        await deliverHandoffNotifications();
+        console.log('[BullMQ Background] inbox-handoff-notifications finished');
+        return { success: true };
       }
 
       case 'reporting-sync': {
