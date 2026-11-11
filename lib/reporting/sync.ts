@@ -1,4 +1,5 @@
 import { Prisma, type SocialConnection } from "@prisma/client";
+import { canAccessCalendarById } from "../calendarPermissions";
 import { db } from "@/lib/db";
 import { getSocialReportingAdapter } from "@/lib/reporting/adapters";
 import { utcSnapshotDate } from "@/lib/socialReporting";
@@ -245,4 +246,23 @@ export async function syncConnectedSocialReporting() {
 
 export async function syncCalendarSocialReporting(calendarId: string) {
   return syncConnections(calendarId);
+}
+
+/** Queue entrypoint rechecks access and connection state immediately before provider IO. */
+export async function syncReportingConnection(connectionId: string) {
+  const connection = await db.socialConnection.findUnique({
+    where: { id: connectionId },
+    include: {
+      publishedPosts: {
+        where: { status: "PUBLISHED" },
+        select: { id: true, platformPostId: true, providerReference: true, publishedAt: true },
+        orderBy: { publishedAt: "desc" },
+        take: 100,
+      },
+    },
+  });
+  if (!connection || connection.status !== "CONNECTED" || !getSocialReportingAdapter(connection.platform) || !(await canAccessCalendarById(connection.calendarId))) {
+    return { status: "SKIPPED" as const };
+  }
+  return syncConnection(connection);
 }

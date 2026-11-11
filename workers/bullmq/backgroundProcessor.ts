@@ -6,7 +6,7 @@ import { PUBLISHING_PLATFORMS, statusWhere } from '../../lib/publishing/state';
 import { syncSocialInboxes } from '../../lib/socialMessaging/x';
 import { processSocialInboxAutoReplies } from '../../lib/socialMessaging/autoReply';
 import { deliverHandoffNotifications } from '../../lib/socialMessaging/handoffNotifications';
-import { syncConnectedSocialReporting } from '../../lib/reporting/sync';
+import { triggerReportingSync } from '../../lib/reporting/syncScheduler';
 import { reconcileOfferExpirations } from '../../lib/billingOffers';
 import { runCalendarTrialEmailCheck } from '../../lib/calendarTrialEmails';
 import { runScheduledAiBusinessResearch } from '../../lib/aiResearchScheduler';
@@ -44,7 +44,7 @@ export async function processBackgroundJob(job: Job<BackgroundJobData>) {
       }
 
       case 'reporting-sync': {
-        const summary = await syncConnectedSocialReporting();
+        const summary = await triggerReportingSync();
         console.log('[BullMQ Background] reporting-sync finished:', summary);
         return { success: true, summary };
       }

@@ -945,12 +945,15 @@ model SocialConnection {
   publishedPosts                  PublishedSocialPost[]
   accountMetricSnapshots          SocialAccountMetricSnapshot[]
   accountPosts                    SocialAccountPost[]
+  reportingSyncJob                ReportingSyncJob?
   calendar                        SocialCalendar                @relation(fields: [calendarId], references: [id], onDelete: Cascade)
   leadConversations               SocialLeadConversation[]
+  lastReportingCheckAt            DateTime?
 
   @@unique([calendarId, platform, platformAccountId])
   @@index([calendarId, platform, status])
   @@index([platform, status])
+  @@index([status, lastReportingCheckAt])
 }
 
 model SocialLeadConversation {
@@ -974,6 +977,7 @@ model SocialLeadConversation {
   aiPausedAt              DateTime?
   crmLead                 CalendarLead?
   handoffNotifications    InboxHandoffNotification[]
+  outboundOperations      SocialInboxOutbound[]
   calendar                SocialCalendar             @relation(fields: [calendarId], references: [id], onDelete: Cascade)
   connection              SocialConnection?          @relation(fields: [socialConnectionId], references: [id])
   messages                SocialLeadMessage[]
@@ -1994,4 +1998,40 @@ enum CalendarRole {
   VIEW_ONLY
   ADD_CONTENT
   EDIT_CALENDAR
+}
+
+model SocialInboxOutbound {
+  id                String @id
+  conversationId    String
+  conversation      SocialLeadConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  requestHash       String
+  messageId         String @unique
+  state             String @default("PENDING")
+  providerMessageId String?
+  handoffOffer      Boolean @default(false)
+  reviewedAt        DateTime?
+  reviewedByCreatorId String?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  @@index([conversationId, state])
+  @@index([state, startedAt])
+}
+
+model ReportingSyncJob {
+  id            String           @id @default(uuid())
+  connection    SocialConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  connectionId  String           @unique
+  calendarId    String
+  status        String           @default("PENDING")
+  attempts      Int              @default(0)
+  nextAttemptAt DateTime         @default(now())
+  leaseUntil    DateTime?
+  leaseToken    String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([calendarId])
 }
