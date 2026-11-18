@@ -21,4 +21,3 @@ export function buildQueries(request: RetrievalRequest): QueryPlan {
     `${request.audience || "Target audience"}\nBrand voice communication guidelines marketing objectives ${platform}`,
   ] };
 }
-

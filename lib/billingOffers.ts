@@ -176,7 +176,7 @@ export async function billingPriceQuotes(creatorId: string) {
   const [offers, redemptions] = await Promise.all([eligibleOffers(creatorId), db.billingOfferRedemption.findMany({ where: { creatorId } })]);
   const quotes: Record<string, { title: string; percent: number; months: number; standardPriceNgn: number; priceNgn: number; remainingCycles: number }> = {};
   for (const product of ["DELIVERY", "CONTENT_WORKSPACE"] as const) {
-    for (const plan of product === "DELIVERY" ? ["STARTER", "GROWTH", "UNLIMITED"] : ["CREATOR", "STUDIO", "UNLIMITED"]) {
+    for (const plan of product === "DELIVERY" ? ["STARTER", "GROWTH", "UNLIMITED"] : ["CREATOR", "GROWTH", "STUDIO", "UNLIMITED", "ENGAGE"]) {
       for (const cycle of ["MONTHLY", "ANNUAL"] as const) {
         const usable = offers.filter(o => {
           const used = redemptions.find(r => r.offerId === o.id && r.product === product);

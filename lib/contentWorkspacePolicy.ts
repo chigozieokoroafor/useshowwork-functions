@@ -32,6 +32,7 @@ export function canAccessContentWorkspace(
     | "compedUntil"
   > & ComplimentaryAccount
 ): boolean {
+  if (account.contentWorkspacePlan === "ENGAGE") return account.contentWorkspaceBillingStatus === "ACTIVE" || (account.contentWorkspaceBillingStatus === "TRIAL" && isContentWorkspaceTrialActive(account));
   if (isComplimentaryAccessActive(account)) {
     return true;
   }
@@ -59,11 +60,12 @@ export function getContentWorkspacePlan(
     | "contentWorkspaceBillingStatus" | "contentWorkspaceTrialEndsAt"
   > & ComplimentaryAccount
 ): ContentWorkspacePlan | null {
+  if (account.contentWorkspacePlan === "ENGAGE") return "ENGAGE";
   if (isContentWorkspaceTrialActive(account)) return "UNLIMITED";
 
   const complimentary = workspaceComplimentaryPlan(account);
   if (complimentary) {
-    const order = ["CREATOR", "STUDIO", "UNLIMITED"];
+    const order = ["CREATOR", "GROWTH", "STUDIO", "UNLIMITED"];
     return account.contentWorkspaceBillingStatus === "ACTIVE" && account.contentWorkspacePlan &&
       order.indexOf(account.contentWorkspacePlan) > order.indexOf(complimentary)
       ? account.contentWorkspacePlan : complimentary;
@@ -100,6 +102,7 @@ export async function validateCanonicalWorkspaceUsage(tx:{query(sql:string,value
   const count=(await tx.query(`SELECT count(*)::integer AS count FROM "CalendarCollaborator" m JOIN "SocialCalendar" w ON w.id=m."calendarId" WHERE w."managerId"=$1 AND m."creatorId"<>$1`,[owner.id])).rows[0].count;
   if(count>=CONTENT_WORKSPACE_PLANS[plan].collaborators)throw Error('COLLABORATOR_LIMIT_REACHED');return;
  }
+ if(plan==='ENGAGE')throw Error('MARKETING_WORKSPACE_REQUIRED');
  if(input.kind==='UPLOAD')throw Error('STORAGE_RESERVATION_PROOF_REQUIRED');
  await tx.query(`INSERT INTO "ContentWorkspaceUsage"("creatorId","cycleStart","updatedAt") VALUES($1,clock_timestamp(),clock_timestamp()) ON CONFLICT DO NOTHING`,[owner.id]);
  const usage=(await tx.query(`SELECT * FROM "ContentWorkspaceUsage" WHERE "creatorId"=$1 FOR UPDATE`,[owner.id])).rows[0],now=(await tx.query('SELECT clock_timestamp() AS now')).rows[0].now;

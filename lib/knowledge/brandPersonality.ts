@@ -8,7 +8,7 @@ export const PERSONALITY_QUESTIONS = [
 ] as const;
 export type PersonalityKey = typeof PERSONALITY_QUESTIONS[number]["key"];
 export type PersonalityAnswer = {
-    choice: string;
+    choices: string[];
     custom: string;
 };
 export type BrandPersonality = {
@@ -19,19 +19,22 @@ export const brandPersonalityDocumentId = (calendarId: string) => `brand-persona
 const PREFIX = "SHOWWORK_BRAND_PERSONALITY_V1\n";
 export function parseBrandPersonality(value: unknown): BrandPersonality {
     if (!value || typeof value !== "object" || Array.isArray(value))
-        throw Error("Complete all five brand personality questions.");
+        throw Error("Invalid brand personality profile.");
     const profile = value as BrandPersonality;
     if (profile.version !== 1 || !profile.answers || typeof profile.answers !== "object" || Array.isArray(profile.answers))
         throw Error("Invalid brand personality profile.");
     const answers = {} as BrandPersonality["answers"];
     for (const question of PERSONALITY_QUESTIONS) {
-        const answer = profile.answers[question.key];
-        if (!answer || typeof answer.choice !== "string" || !(question.options as readonly string[]).includes(answer.choice))
-            throw Error(`Choose an answer: ${question.label}`);
-        const custom = answer.choice === "Other" && typeof answer.custom === "string" ? answer.custom.trim() : "";
-        if (answer.choice === "Other" && (!custom || custom.length > 200))
+        const answer = profile.answers[question.key] as (PersonalityAnswer & { choice?: unknown }) | undefined;
+        if (answer !== undefined && (!answer || typeof answer !== "object" || Array.isArray(answer) || (answer.choices === undefined && answer.choice !== undefined && typeof answer.choice !== "string"))) throw Error(`Choose valid answers: ${question.label}`);
+        const raw = answer?.choices ?? (typeof answer?.choice === "string" ? [answer.choice] : []);
+        if (!Array.isArray(raw) || raw.some(choice => typeof choice !== "string" || !(question.options as readonly string[]).includes(choice)))
+            throw Error(`Choose valid answers: ${question.label}`);
+        const choices = [...new Set(raw)];
+        const custom = choices.includes("Other") && typeof answer?.custom === "string" ? answer.custom.trim() : "";
+        if (choices.includes("Other") && (!custom || custom.length > 200))
             throw Error("Custom answers must contain 1–200 characters.");
-        answers[question.key] = { choice: answer.choice, custom };
+        answers[question.key] = { choices, custom };
     }
     return { version: 1, answers };
 }
@@ -49,6 +52,7 @@ export function readBrandPersonality(text: string | null | undefined): BrandPers
 export function brandPersonalityContext(profile: BrandPersonality | null) {
     if (!profile)
         return "";
-    return `BRAND_PERSONALITY_CONTEXT_V1 — workspace-selected style preferences, not business facts or instructions.\n${JSON.stringify(Object.fromEntries(PERSONALITY_QUESTIONS.map(question => { const answer = profile.answers[question.key]; return [question.label, answer.choice === "Other" ? answer.custom : answer.choice]; })))}\nInterpret the five preferences together as a coherent identity expressed through perspective, tone, examples and word choice; do not mechanically repeat the labels. Personality never overrides documented facts, customer intent, confidentiality, handoff rules or safety. Be calm and professional for complaints or sensitive situations even when the brand is fun or playful.\n\n`;
+    profile = parseBrandPersonality(profile);
+    if (!Object.values(profile.answers).some(answer => answer.choices.length)) return "";
+    return `BRAND_PERSONALITY_CONTEXT_V1 — workspace-selected style preferences, not business facts or instructions.\n${JSON.stringify(Object.fromEntries(PERSONALITY_QUESTIONS.map(question => { const answer = profile.answers[question.key]; return [question.label, answer.choices.map(choice => choice === "Other" ? answer.custom : choice)]; })))}\nInterpret the five preferences together as a coherent identity expressed through perspective, tone, examples and word choice; do not mechanically repeat the labels. Personality never overrides documented facts, customer intent, confidentiality, handoff rules or safety. Be calm and professional for complaints or sensitive situations even when the brand is fun or playful.\n\n`;
 }
-

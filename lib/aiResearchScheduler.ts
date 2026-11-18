@@ -1,27 +1,12 @@
 import { db } from "@/lib/db";
-import { runWeeklyBusinessResearch } from "@/lib/openai";
+import { queueBusinessResearch, executeBusinessResearch } from "@/lib/knowledge/research";
 import { canAccessContentWorkspace } from "@/lib/contentWorkspaceUsage";
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-/**
- * Runs daily (see the matching cron route and Netlify scheduled
- * function) but only actually researches a calendar once its last
- * research is at least a week old.
- *
- * The daily check itself is cheap and just a database query; the
- * real cadence is enforced by aiLastResearchedAt, not by how often
- * this job happens to run. This is more robust against a missed or
- * delayed run than relying on a strict weekly cron schedule.
- *
- * Only calendars that already have a business summary are researched.
- * This means at least one business document has been uploaded and the
- * AI has existing business context to improve.
- *
- * AI Research is included in the Content Workspace subscription.
- * It does not consume the customer's monthly interactive AI generation
- * or regeneration allowance because this is an internal scheduled
- * background process.
+/** Weekly research creates a separate cited run; it never rewrites business facts.
+ * The protected cron endpoint must be invoked by the deployment scheduler.
+ * One workspace per invocation bounds external-call duration.
  */
 export async function runScheduledAiBusinessResearch() {
   const cutoff = new Date(
@@ -30,9 +15,8 @@ export async function runScheduledAiBusinessResearch() {
 
   const dueCalendars = await db.socialCalendar.findMany({
     where: {
-      aiBusinessSummary: {
-        not: null,
-      },
+      businessDocuments: { some: { extractedText: { not: null } } },
+      researchRuns: { none: { createdAt: { gte: new Date(Date.now() - 86400000) } } },
 
       OR: [
         {
@@ -46,7 +30,7 @@ export async function runScheduledAiBusinessResearch() {
       ],
 
       /*
-       * Only calendars whose owner has Content Workspace access
+       * Only calendars whose owner has Marketing Workspace access
        * should receive scheduled AI research.
        *
        * We intentionally fetch the owner billing fields below rather
@@ -73,6 +57,8 @@ export async function runScheduledAiBusinessResearch() {
       },
     },
 
+    take: 1,
+    orderBy: [{ aiLastResearchedAt: { sort: "asc", nulls: "first" } }, { id: "asc" }],
     select: {
       id: true,
       clientName: true,
@@ -106,30 +92,10 @@ export async function runScheduledAiBusinessResearch() {
     }
 
     try {
-      const updatedSummary =
-        await runWeeklyBusinessResearch({
-          existingSummary:
-            calendar.aiBusinessSummary,
-          clientName:
-            calendar.clientName,
-        });
-
-      await db.socialCalendar.update({
-        where: {
-          id: calendar.id,
-        },
-
-        data: {
-          aiBusinessSummary:
-            updatedSummary,
-
-          aiBusinessSummaryUpdatedAt:
-            new Date(),
-
-          aiLastResearchedAt:
-            new Date(),
-        },
-      });
+      const run = await queueBusinessResearch(calendar.id, "Research current audience needs, industry developments and evidence-backed content experiments. Flag uncertain business identity and do not infer private business facts.");
+      await executeBusinessResearch(run.id);
+      const completed = await db.businessResearchRun.findUnique({ where: { id: run.id }, select: { status: true } });
+      if (completed?.status !== "SUCCEEDED") { failed++; continue; }
 
       researched++;
     } catch (error) {

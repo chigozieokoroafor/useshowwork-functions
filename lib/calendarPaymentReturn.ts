@@ -7,6 +7,7 @@ export async function calendarPaymentReturn(req: Request, creatorId: string) {
   try {
     const source = new URL(req.headers.get("referer") || "");
     if (source.origin !== new URL(appUrl()).origin) return fallback;
+    if (source.pathname === "/dashboard/engage") return `${appUrl()}/dashboard/engage?subscriptionPayment=callback`;
     const match = source.pathname.match(/^\/dashboard\/calendars\/([^/]+)$/);
     if (!match) return fallback;
     const calendar = await db.socialCalendar.findUnique({ where: { id: match[1] }, select: { managerId: true } });

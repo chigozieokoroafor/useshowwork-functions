@@ -7,11 +7,12 @@ export interface PublishingPolicyOwner extends ComplimentaryAccount {
   id:string;isDeactivated:boolean;contentWorkspacePlan:ContentWorkspacePlan|null;
   contentWorkspaceBillingStatus:string;contentWorkspaceTrialEndsAt:Date|null;
 }
-export function workspaceEligibility(owner:PublishingPolicyOwner,ordinal:number,now:Date) {
+export function workspaceEligibility(owner:PublishingPolicyOwner,ordinal:number,now:Date,purpose:"PUBLISHING"|"WORKSPACE"="PUBLISHING") {
+  if(owner.contentWorkspacePlan==='ENGAGE')return {allowed:purpose==='WORKSPACE'&&(owner.contentWorkspaceBillingStatus==='ACTIVE'||owner.contentWorkspaceBillingStatus==='TRIAL'&&!!owner.contentWorkspaceTrialEndsAt&&owner.contentWorkspaceTrialEndsAt>now)&&ordinal===1,plan:'ENGAGE' as ContentWorkspacePlan};
   const trial=['TRIAL','ACTIVE'].includes(owner.contentWorkspaceBillingStatus)&&!!owner.contentWorkspaceTrialEndsAt&&owner.contentWorkspaceTrialEndsAt>now;
   const complimentary=workspaceComplimentaryPlan(owner,now);
   const access=!!complimentary||owner.contentWorkspaceBillingStatus==='ACTIVE'&&!!owner.contentWorkspacePlan||owner.contentWorkspaceBillingStatus==='TRIAL'&&!!owner.contentWorkspacePlan&&trial;
-  const order=['CREATOR','STUDIO','UNLIMITED'];
+  const order=['CREATOR','GROWTH','STUDIO','UNLIMITED'];
   const plan:ContentWorkspacePlan|null=trial?'UNLIMITED':complimentary?
     owner.contentWorkspaceBillingStatus==='ACTIVE'&&owner.contentWorkspacePlan&&order.indexOf(owner.contentWorkspacePlan)>order.indexOf(complimentary)?owner.contentWorkspacePlan:complimentary:owner.contentWorkspacePlan;
   return {allowed:!!access&&!!plan&&Number.isInteger(ordinal)&&ordinal>0&&ordinal<=(plan?CONTENT_WORKSPACE_PLANS[plan]?.activeWorkspaces??0:0),plan};

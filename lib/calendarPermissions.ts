@@ -1,3 +1,4 @@
+import { packagePermissions, packageAllowsChannel } from "@/lib/engagePolicy";
 import { effectiveTeamPermissions, normalizeTeamRole, type TeamPermission, type TeamRole } from "@/lib/calendarTeamPolicy";
 import { complimentaryAccessSelect } from "@/lib/complimentaryAccess";
 import { db } from "@/lib/db";
@@ -11,16 +12,16 @@ import { CONTENT_WORKSPACE_PLANS, CONTENT_WORKSPACE_FEATURES, workspaceFeatureUp
 import { NextResponse } from "next/server";
 
 export type CalendarRole = "VIEW_ONLY" | "ADD_CONTENT" | "EDIT_CALENDAR";
-export type CalendarAccess = { role: TeamRole; isOwner: boolean; permissions: TeamPermission[]; memberId?: string };
+export type CalendarAccess = { role: TeamRole; isOwner: boolean; permissions: TeamPermission[]; memberId?: string; packagePlan?: string | null };
 export async function getCalendarAccess(creatorId: string, calendarId: string): Promise<CalendarAccess | null> {
-  const calendar = await db.socialCalendar.findUnique({ where: { id: calendarId }, select: { managerId: true } });
+  const calendar = await db.socialCalendar.findUnique({ where: { id: calendarId }, select: { managerId: true, manager: { select: { contentWorkspacePlan: true } } } });
   if (!calendar) return null;
-  if (calendar.managerId === creatorId) return { role: "OWNER", isOwner: true, permissions: effectiveTeamPermissions("OWNER") };
+  if (calendar.managerId === creatorId) return { role: "OWNER", isOwner: true, packagePlan: calendar.manager.contentWorkspacePlan, permissions: packagePermissions(calendar.manager.contentWorkspacePlan, effectiveTeamPermissions("OWNER")) };
   const member = await db.calendarCollaborator.findUnique({ where: { calendarId_creatorId: { calendarId, creatorId } } });
   if (!member) return null;
   const role = normalizeTeamRole(member.role);
   if (!role) return null;
-  return { role, isOwner: false, memberId: member.id, permissions: effectiveTeamPermissions(member.role, member.permissions, member.customPermissions) };
+  return { role, isOwner: false, packagePlan: calendar.manager.contentWorkspacePlan, memberId: member.id, permissions: packagePermissions(calendar.manager.contentWorkspacePlan, effectiveTeamPermissions(member.role, member.permissions, member.customPermissions)) };
 }
 /** Legacy projection for calendar widgets; API authorization always uses feature permissions. */
 export async function getCalendarRole(creatorId: string, calendarId: string): Promise<CalendarRole | null> {
@@ -28,24 +29,25 @@ export async function getCalendarRole(creatorId: string, calendarId: string): Pr
   if (!access) return null;
   return access.permissions.includes("calendar.edit") ? "EDIT_CALENDAR" : access.permissions.includes("creatives.upload") ? "ADD_CONTENT" : "VIEW_ONLY";
 }
-export async function hasCalendarPermission(creatorId: string, calendarId: string, required: CalendarRole | TeamPermission): Promise<boolean> {
+export async function hasCalendarPermission(creatorId: string, calendarId: string, required: CalendarRole | TeamPermission, platform?: string): Promise<boolean> {
   const access = await getCalendarAccess(creatorId, calendarId);
   if (!access) return false;
   const permission: TeamPermission = required === "VIEW_ONLY" ? "calendar.view" : required === "ADD_CONTENT" ? "creatives.upload" : required === "EDIT_CALENDAR" ? "calendar.edit" : required;
   if (!access.permissions.includes(permission)) return false;
+  if (permission === "channels.manage" && platform && !packageAllowsChannel(access.packagePlan, platform)) return false;
   // Reading existing data and revoking team access are available after billing expiry.
   if (permission.endsWith(".view") || permission === "people.manage") return true;
   return canAccessCalendarById(calendarId);
 }
 
 /**
- * Single source of truth for whether the Content Workspace / Calendar
+ * Single source of truth for whether the Marketing Workspace / Calendar
  * product is currently accessible.
  *
- * Billing is account-level: one Content Workspace subscription covers
+ * Billing is account-level: one Marketing Workspace subscription covers
  * all workspaces owned by the creator.
  *
- * This now uses the new Content Workspace billing fields rather than
+ * This now uses the new Marketing Workspace billing fields rather than
  * the legacy calendar billing fields.
  */
 export function canAccessCalendar(
@@ -57,8 +59,8 @@ export function canAccessCalendar(
 /**
  * Convenience wrapper for cases where only a calendarId is available.
  *
- * The calendar's manager owns the Content Workspace subscription, so
- * access is determined from the manager's Content Workspace billing
+ * The calendar's manager owns the Marketing Workspace subscription, so
+ * access is determined from the manager's Marketing Workspace billing
  * state.
  */
 export async function canAccessCalendarById(

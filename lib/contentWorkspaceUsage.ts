@@ -1,3 +1,4 @@
+import { lockWorkspaceUploadReservation, lockWorkspaceUploadUsage } from "@/lib/workspaceUploadLocks";
 import { complimentaryAccessSelect, workspaceComplimentaryPlan, type ComplimentaryAccount } from "@/lib/complimentaryAccess";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -76,7 +77,7 @@ import {isContentWorkspaceTrialActive,isComplimentaryAccessActive,canAccessConte
 export {isContentWorkspaceTrialActive,isComplimentaryAccessActive,canAccessContentWorkspace,getContentWorkspacePlan,canUseContentWorkspaceFeature,currentAiCycleStart,validateCanonicalWorkspaceUsage} from "./contentWorkspacePolicy";
 
 /**
- * Counts the creator's currently owned Content Workspaces.
+ * Counts the creator's currently owned Marketing Workspaces.
  */
 export async function getActiveWorkspaceCount(
   creatorId: string
@@ -89,7 +90,7 @@ export async function getActiveWorkspaceCount(
 }
 
 /**
- * Counts current collaborators across the creator's owned Content Workspaces.
+ * Counts current collaborators across the creator's owned Marketing Workspaces.
  */
 export async function getCollaboratorCount(
   creatorId: string
@@ -222,14 +223,14 @@ export async function getContentWorkspaceUsage(
 }
 
 /**
- * Checks whether another Content Workspace can be created.
+ * Checks whether another Marketing Workspace can be created.
  */
 /**
- * Checks whether another Content Workspace can be created.
+ * Checks whether another Marketing Workspace can be created.
  *
- * A creator who has never used their Content Workspace trial may
+ * A creator who has never used their Marketing Workspace trial may
  * create their first workspace. The creation route starts the
- * 7-day trial immediately after the workspace is created.
+ * 3-day trial immediately after the workspace is created.
  */
 export async function canCreateContentWorkspace(
   account: ContentWorkspaceAccount
@@ -248,7 +249,7 @@ export async function canCreateContentWorkspace(
     return {
       allowed: false,
       reason:
-        "Your Content Workspace subscription or trial is not active.",
+        "Your Marketing Workspace subscription or trial is not active.",
       usage,
     };
   }
@@ -260,7 +261,7 @@ export async function canCreateContentWorkspace(
       allowed: false,
       reason: `Your ${usage.plan} plan allows up to ${
         usage.workspaceLimit
-      } active Content Workspace${
+      } active Marketing Workspace${
         usage.workspaceLimit === 1 ? "" : "s"
       }. Upgrade to increase your allowance. Existing workspaces are preserved.`,
       usage,
@@ -287,7 +288,7 @@ export async function canAddContentWorkspaceCollaborator(
   if (!usage.hasAccess) {
     return {
       allowed: false,
-      reason: "Your Content Workspace subscription or trial is not active.",
+      reason: "Your Marketing Workspace subscription or trial is not active.",
       usage,
     };
   }
@@ -333,7 +334,8 @@ export async function reserveContentWorkspaceStorage(
   creatorId: string,
   calendarId: string,
   fileKey: string,
-  bytes: number
+  bytes: number,
+  receiptId?: string,
 ): Promise<{
   allowed: boolean;
   reason?: string;
@@ -365,16 +367,18 @@ export async function reserveContentWorkspaceStorage(
     };
   }
 
-  const creator = await db.creator.findUnique({
-    where: { id: creatorId },
-   select: {
-  contentWorkspacePlan: true,
-  contentWorkspaceBillingStatus: true,
-  contentWorkspaceTrialEndsAt: true,
-  ...complimentaryAccessSelect, isComped: true,
-  compedUntil: true,
-},
-  });
+  const [creator, calendar] = await Promise.all([
+    db.creator.findUnique({
+      where: { id: creatorId },
+      select: {
+        contentWorkspacePlan: true,
+        contentWorkspaceBillingStatus: true,
+        contentWorkspaceTrialEndsAt: true,
+        ...complimentaryAccessSelect, isComped: true, compedUntil: true,
+      },
+    }),
+    db.socialCalendar.findUnique({ where: { id: calendarId }, select: { managerId: true } }),
+  ]);
 
   if (!creator) {
     return {
@@ -392,7 +396,7 @@ export async function reserveContentWorkspaceStorage(
   if (!plan || !canAccessContentWorkspace(creator)) {
     return {
       allowed: false,
-      reason: "Your Content Workspace subscription or trial is not active.",
+      reason: "Your Marketing Workspace subscription or trial is not active.",
       storageBytes: 0,
       storageReservedBytes: 0,
       storageLimitBytes: 0,
@@ -407,17 +411,10 @@ export async function reserveContentWorkspaceStorage(
    * This prevents a caller from creating a reservation against
    * an unrelated workspace.
    */
-  const calendar = await db.socialCalendar.findUnique({
-    where: { id: calendarId },
-    select: {
-      managerId: true,
-    },
-  });
-
   if (!calendar || calendar.managerId !== creatorId) {
     return {
       allowed: false,
-      reason: "Content Workspace not found.",
+      reason: "Marketing Workspace not found.",
       storageBytes: 0,
       storageReservedBytes: 0,
       storageLimitBytes,
@@ -425,12 +422,15 @@ export async function reserveContentWorkspaceStorage(
     };
   }
 
-  await getOrCreateContentWorkspaceUsage(creatorId);
-
   const result = await retryStorageTransaction(() => db.$transaction(
     async (tx) => {
-    const current = await tx.contentWorkspaceUsage.findUnique({
+    // Initialize and read storage in one operation, inside the retryable transaction.
+    // Uploads do not need to reset or fetch unrelated monthly AI allowances.
+    const current = await tx.contentWorkspaceUsage.upsert({
       where: { creatorId },
+      create: { creatorId, cycleStart: new Date(), storageBytes: 0, storageReservedBytes: 0,
+        aiGenerationsUsed: 0, aiRegenerationsUsed: 0 },
+      update: {},
       select: {
         storageBytes: true,
         storageReservedBytes: true,
@@ -470,6 +470,7 @@ export async function reserveContentWorkspaceStorage(
     const reservation =
       await tx.contentWorkspaceStorageReservation.create({
         data: {
+          ...(receiptId ? { id: receiptId } : {}),
           creatorId,
           calendarId,
           fileKey,
@@ -499,7 +500,7 @@ export async function reserveContentWorkspaceStorage(
   if (!result.allowed) {
     return {
       allowed: false,
-      reason: `This upload exceeds your available Content Workspace storage. You have ${formatStorageBytes(
+      reason: `This upload exceeds your available Marketing Workspace storage. You have ${formatStorageBytes(
         Math.max(
           0,
           storageLimitBytes -
@@ -685,10 +686,7 @@ export async function releaseContentWorkspaceStorageReservation(
   }
 
   return db.$transaction(async (tx) => {
-    const reservation =
-      await tx.contentWorkspaceStorageReservation.findUnique({
-        where: { id: reservationId },
-      });
+    const reservation = await lockWorkspaceUploadReservation(tx, reservationId);
 
     if (!reservation) {
       return {
@@ -734,6 +732,7 @@ export async function releaseContentWorkspaceStorageReservation(
 
     const bytes = Number(reservation.bytes);
 
+    await lockWorkspaceUploadUsage(tx, creatorId);
     const usage = await tx.contentWorkspaceUsage.findUnique({
       where: { creatorId },
       select: {
@@ -745,7 +744,7 @@ export async function releaseContentWorkspaceStorageReservation(
       return {
         success: false,
         bytes: 0,
-        error: "Content Workspace usage record not found.",
+        error: "Marketing Workspace usage record not found.",
       };
     }
 
@@ -779,7 +778,7 @@ export async function releaseContentWorkspaceStorageReservation(
 }
 
 /**
- * Removes confirmed storage usage after a Content Workspace file
+ * Removes confirmed storage usage after a Marketing Workspace file
  * is deleted.
  */
 export async function releaseContentWorkspaceStorage(
@@ -791,6 +790,7 @@ export async function releaseContentWorkspaceStorage(
   }
 
   await db.$transaction(async (tx) => {
+    await lockWorkspaceUploadUsage(tx, creatorId);
     const usage = await tx.contentWorkspaceUsage.findUnique({
       where: { creatorId },
       select: {
@@ -960,7 +960,7 @@ export async function consumeAiRegeneration(
   };
 }
 /**
- * Releases expired pending Content Workspace storage reservations.
+ * Releases expired pending Marketing Workspace storage reservations.
  *
  * This is intended to run from a scheduled maintenance job.
  * Each reservation is handled transactionally so its reserved bytes
@@ -1000,16 +1000,7 @@ export async function cleanupExpiredContentWorkspaceStorageReservations(): Promi
   for (const reservation of reservations) {
     try {
       const result = await db.$transaction(async (tx) => {
-        const current =
-          await tx.contentWorkspaceStorageReservation.findUnique({
-            where: { id: reservation.id },
-            select: {
-              creatorId: true,
-              bytes: true,
-              status: true,
-              expiresAt: true,
-            },
-          });
+        const current = await lockWorkspaceUploadReservation(tx, reservation.id);
 
         if (
           !current ||
@@ -1039,6 +1030,7 @@ export async function cleanupExpiredContentWorkspaceStorageReservations(): Promi
           };
         }
 
+        await lockWorkspaceUploadUsage(tx, current.creatorId);
         const usage = await tx.contentWorkspaceUsage.findUnique({
           where: {
             creatorId: current.creatorId,
