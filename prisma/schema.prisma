@@ -125,6 +125,7 @@ model Creator {
   billingOfferSubscriptions BillingOfferSubscription[]
   billingOfferRedemptions BillingOfferRedemption[]
   billingBenefitNotifications BillingBenefitNotification[]
+  accountBillingDetails AccountBillingDetails?
   // Overrides the standard Free-tier limit (normally 1/month) for this
   // specific creator, without granting them a paid tier or full comped
   // access — they stay on Free, just with a raised allowance. Null
@@ -1720,6 +1721,7 @@ enum CalendarBillingStatus {
 }
 
 model SocialCalendar {
+  workspaceNotifications WorkspaceNotification[]
   randyConversations WorkspaceRandyConversation[]
   researchPlan Json?
   // Workspace-wide permission to dispatch queued social posts.
@@ -1865,6 +1867,7 @@ model CalendarBusinessDocument {
   originalName   String
   websiteUrl     String? @db.Text
   websiteUrlHash String? @db.VarChar(64)
+  websiteRefreshedAt DateTime?
   sizeBytes      BigInt  @default(0)
   extractedText  String? @db.Text
 
@@ -2428,6 +2431,7 @@ model CalendarPost {
   assets               CalendarPostAsset[]
   publishedSocialPosts PublishedSocialPost[]
   comments             CalendarPostComment[]
+  teamFeedback         CalendarPostTeamFeedback[]
   videoComments        CalendarPostVideoComment[]
   customFields         CalendarPostCustomField[]
   aiGenerations        CalendarPostAiGeneration[]
@@ -2503,6 +2507,17 @@ model CalendarPostAsset {
 
   @@index([postId])
   @@index([fileKey])
+}
+
+model CalendarPostTeamFeedback {
+  id         String       @id @default(uuid())
+  postId     String
+  post       CalendarPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorName String
+  message    String
+  createdAt  DateTime     @default(now())
+
+  @@index([postId, createdAt, id])
 }
 
 model CalendarPostComment {
@@ -2827,6 +2842,23 @@ model TikTokAccountRuntime {
   statusNextAt DateTime?
 }
 
+model WorkspaceNotification {
+  calendarId  String
+  calendar    SocialCalendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  eventKey     String
+  kind         String
+  batchId      String?
+  actor        String?
+  title        String
+  description  String?
+  postId       String?
+  focusDate    String?
+  createdAt    DateTime @default(now())
+
+  @@id([calendarId, eventKey])
+  @@index([calendarId, createdAt])
+}
+
 model CalendarTeamActivity {
   id String @id @default(uuid())
   calendarId String
@@ -3043,4 +3075,13 @@ model ReportingSyncJob {
 
   @@index([status, nextAttemptAt])
   @@index([calendarId])
+}
+
+model AccountBillingDetails {
+  creatorId String  @id
+  creator   Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  name      String?
+  email     String?
+  address   String?
+  taxId     String?
 }

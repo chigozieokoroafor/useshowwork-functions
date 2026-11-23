@@ -1,3 +1,4 @@
+import { notifyCalendarWorkflow } from "../../lib/calendarWorkflowEmails";
 import { Job } from "bullmq";
 import { db } from "../../lib/db";
 import { generateContentCalendar } from "../../lib/openai";
@@ -218,6 +219,21 @@ export async function processContentGenerationJob(job: Job<ContentGenerationJobD
 
       return created;
     }, { timeout: 25000 });
+
+    // Notify team that calendar generation completed
+    try {
+      await notifyCalendarWorkflow({
+        kind: "generated",
+        calendarId,
+        actorId: creatorId,
+        key: jobId ?? posts[0]?.id ?? "",
+        postIds: posts.map((p) => p.id),
+        range: [String(startDate), String(endDate)],
+      });
+      console.log(`[BullMQ AI Gen] Sent calendar workflow completion notifications for calendar ${calendarId}`);
+    } catch (notifyError) {
+      console.error("[BullMQ AI Gen] Failed to send calendar workflow notifications:", notifyError);
+    }
 
     const result = {
       created: posts.length,
