@@ -4,6 +4,9 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
   CONTENT_WORKSPACE_PLANS,
+  ENGAGE_TRIAL_AI_REPLY_LIMIT,
+  WORKSPACE_TRIAL_AI_CREDITS_LIMIT,
+  getTrialAiCreditCost,
   planIncludesWorkspaceFeature,
   type ContentWorkspaceFeature,
   type ContentWorkspacePlan,
@@ -71,6 +74,10 @@ export interface ContentWorkspaceUsage {
   aiRegenerationsRemaining: number;
 
   cycleStart: Date | null;
+  trialAiCreditsUsed?: number;
+  trialAiCreditsLimit?: number;
+  trialAiCreditsRemaining?: number;
+  isTrial?: boolean;
 }
 
 import {isContentWorkspaceTrialActive,isComplimentaryAccessActive,canAccessContentWorkspace,getContentWorkspacePlan,canUseContentWorkspaceFeature,currentAiCycleStart,validateCanonicalWorkspaceUsage} from "./contentWorkspacePolicy";
@@ -108,7 +115,7 @@ export async function getCollaboratorCount(
 /**
  * Ensures the creator has a usage row.
  */
-export async function getOrCreateContentWorkspaceUsage(creatorId: string) {
+export async function getOrCreateContentWorkspaceUsage(creatorId: string, engageTrial = false) {
   const usage = await db.contentWorkspaceUsage.upsert({
     where: {
       creatorId,
@@ -123,6 +130,7 @@ export async function getOrCreateContentWorkspaceUsage(creatorId: string) {
     },
     update: {},
   });
+  if (engageTrial) return usage;
   const cycleStart = currentAiCycleStart(usage.cycleStart);
   if (cycleStart.getTime() !== usage.cycleStart.getTime()) {
     // Compare-and-swap avoids resetting a quota twice during concurrent requests.
@@ -173,11 +181,16 @@ export async function getContentWorkspaceUsage(
   }
 
   const entitlements = CONTENT_WORKSPACE_PLANS[plan];
+  const isTrial = (isContentWorkspaceTrialActive(account) || account.contentWorkspaceBillingStatus === "TRIAL") && !isComplimentaryAccessActive(account);
+  const engageTrial = plan === "ENGAGE" && account.contentWorkspaceBillingStatus === "TRIAL";
+  const aiGenerationLimit = isTrial
+    ? (engageTrial ? ENGAGE_TRIAL_AI_REPLY_LIMIT : WORKSPACE_TRIAL_AI_CREDITS_LIMIT)
+    : entitlements.aiGenerations;
 
   const [workspaceCount, collaboratorCount, usage] = await Promise.all([
     getActiveWorkspaceCount(account.id),
     getCollaboratorCount(account.id),
-    getOrCreateContentWorkspaceUsage(account.id),
+    getOrCreateContentWorkspaceUsage(account.id, engageTrial),
   ]);
 
   const storageBytes = Number(usage.storageBytes);
@@ -204,18 +217,22 @@ export async function getContentWorkspaceUsage(
       storageLimitBytes - storageBytes - storageReservedBytes
     ),
 
-    aiGenerationsUsed: usage.aiGenerationsUsed,
-    aiGenerationLimit: entitlements.aiGenerations,
+    aiGenerationsUsed: isTrial && !engageTrial ? usage.trialAiCreditsUsed : usage.aiGenerationsUsed,
+    aiGenerationLimit,
     aiGenerationsRemaining: Math.max(
       0,
-      entitlements.aiGenerations - usage.aiGenerationsUsed
+      aiGenerationLimit - (isTrial && !engageTrial ? usage.trialAiCreditsUsed : usage.aiGenerationsUsed)
     ),
+    trialAiCreditsUsed: usage.trialAiCreditsUsed,
+    trialAiCreditsLimit: WORKSPACE_TRIAL_AI_CREDITS_LIMIT,
+    trialAiCreditsRemaining: Math.max(0, WORKSPACE_TRIAL_AI_CREDITS_LIMIT - usage.trialAiCreditsUsed),
+    isTrial,
 
     aiRegenerationsUsed: usage.aiRegenerationsUsed,
     aiRegenerationLimit: entitlements.aiRegenerations,
     aiRegenerationsRemaining: Math.max(
       0,
-      Math.min(entitlements.aiRegenerations - usage.aiRegenerationsUsed, entitlements.aiGenerations - usage.aiGenerationsUsed)
+      Math.min(entitlements.aiRegenerations - usage.aiRegenerationsUsed, aiGenerationLimit - usage.aiGenerationsUsed)
     ),
 
     cycleStart: usage.cycleStart,
@@ -824,22 +841,26 @@ export async function releaseContentWorkspaceStorage(
  * Atomically consumes one AI generation.
  */
 export async function consumeAiGeneration(
-  creatorId: string
+  creatorId: string,
+  creditCost = 1
 ): Promise<{
   allowed: boolean;
   used: number;
   limit: number;
   remaining: number;
+  engageTrial?: boolean;
+  isTrial?: boolean;
 }> {
   const creator = await db.creator.findUnique({
     where: { id: creatorId },
-  select: {
-  contentWorkspacePlan: true,
-  contentWorkspaceBillingStatus: true,
-  contentWorkspaceTrialEndsAt: true,
-  ...complimentaryAccessSelect, isComped: true,
-  compedUntil: true,
-},
+    select: {
+      contentWorkspacePlan: true,
+      contentWorkspaceBillingStatus: true,
+      contentWorkspaceTrialEndsAt: true,
+      ...complimentaryAccessSelect,
+      isComped: true,
+      compedUntil: true,
+    },
   });
 
   if (!creator) {
@@ -862,34 +883,131 @@ export async function consumeAiGeneration(
     };
   }
 
-  const limit = CONTENT_WORKSPACE_PLANS[plan].aiGenerations;
-  const usage = await getOrCreateContentWorkspaceUsage(creatorId);
+  const isTrial = (isContentWorkspaceTrialActive(creator) || creator.contentWorkspaceBillingStatus === "TRIAL") && !isComplimentaryAccessActive(creator);
+  const engageTrial = plan === "ENGAGE" && creator.contentWorkspaceBillingStatus === "TRIAL";
+  const cost = Math.max(1, creditCost);
 
-  if (usage.aiGenerationsUsed >= limit) {
+  // 10-credit limit for Showwork's 3-day free trial.
+  // A single draft costs 1 credit, and a short content plan costs 3.
+  if (isTrial && !engageTrial) {
+    const limit = WORKSPACE_TRIAL_AI_CREDITS_LIMIT;
+    const usage = await getOrCreateContentWorkspaceUsage(creatorId, false);
+
+    if (usage.trialAiCreditsUsed + cost > limit) {
+      return {
+        allowed: false,
+        isTrial: true,
+        used: usage.trialAiCreditsUsed,
+        limit,
+        remaining: Math.max(0, limit - usage.trialAiCreditsUsed),
+      };
+    }
+
+    const consumed = await db.contentWorkspaceUsage.updateMany({
+      where: {
+        creatorId,
+        trialAiCreditsUsed: { lte: limit - cost },
+      },
+      data: {
+        trialAiCreditsUsed: { increment: cost },
+        aiGenerationsUsed: { increment: cost },
+      },
+    });
+
+    const updated = await db.contentWorkspaceUsage.findUniqueOrThrow({ where: { creatorId } });
+    return {
+      allowed: consumed.count === 1,
+      isTrial: true,
+      used: updated.trialAiCreditsUsed,
+      limit,
+      remaining: Math.max(0, limit - updated.trialAiCreditsUsed),
+    };
+  }
+
+  const limit = engageTrial ? ENGAGE_TRIAL_AI_REPLY_LIMIT : CONTENT_WORKSPACE_PLANS[plan].aiGenerations;
+  // Both inbox paths charge the same counter. A trial never rolls over mid-trial.
+  const usage = await getOrCreateContentWorkspaceUsage(creatorId, engageTrial);
+
+  if (usage.aiGenerationsUsed + cost > limit) {
     return {
       allowed: false,
+      engageTrial,
+      isTrial: false,
       used: usage.aiGenerationsUsed,
       limit,
-      remaining: 0,
+      remaining: Math.max(0, limit - usage.aiGenerationsUsed),
     };
   }
 
   const consumed = await db.contentWorkspaceUsage.updateMany({
-    where: { creatorId, cycleStart: usage.cycleStart, aiGenerationsUsed: { lt: limit } },
-    data: { aiGenerationsUsed: { increment: 1 } },
+    where: { creatorId, cycleStart: usage.cycleStart, aiGenerationsUsed: { lte: limit - cost } },
+    data: { aiGenerationsUsed: { increment: cost } },
   });
   const updated = await db.contentWorkspaceUsage.findUniqueOrThrow({ where: { creatorId } });
   return {
     allowed: consumed.count === 1,
-    used: updated.aiGenerationsUsed, limit,
+    engageTrial,
+    isTrial: false,
+    used: updated.aiGenerationsUsed,
+    limit,
     remaining: Math.max(0, limit - updated.aiGenerationsUsed),
   };
+}
+
+export async function refundAiGeneration(creatorId: string, creditCost = 1) {
+  const creator = await db.creator.findUnique({
+    where: { id: creatorId },
+    select: {
+      contentWorkspaceBillingStatus: true,
+      contentWorkspaceTrialEndsAt: true,
+      ...complimentaryAccessSelect,
+      isComped: true,
+      compedUntil: true,
+    },
+  });
+  if (!creator) return;
+  const cost = Math.max(1, creditCost);
+  const isTrial = (isContentWorkspaceTrialActive(creator) || creator.contentWorkspaceBillingStatus === "TRIAL") && !isComplimentaryAccessActive(creator);
+  if (isTrial) {
+    await db.contentWorkspaceUsage.updateMany({
+      where: { creatorId, trialAiCreditsUsed: { gte: cost } },
+      data: {
+        trialAiCreditsUsed: { decrement: cost },
+        aiGenerationsUsed: { decrement: cost },
+      },
+    });
+  } else {
+    await db.contentWorkspaceUsage.updateMany({
+      where: { creatorId, aiGenerationsUsed: { gte: cost } },
+      data: { aiGenerationsUsed: { decrement: cost } },
+    });
+  }
+}
+
+export async function resetPaidContentWorkspaceAllowance(creatorId: string) {
+  await db.contentWorkspaceUsage.upsert({
+    where: { creatorId },
+    create: {
+      creatorId,
+      cycleStart: new Date(),
+      storageBytes: 0,
+      storageReservedBytes: 0,
+      aiGenerationsUsed: 0,
+      aiRegenerationsUsed: 0,
+      trialAiCreditsUsed: WORKSPACE_TRIAL_AI_CREDITS_LIMIT,
+    },
+    update: {
+      cycleStart: new Date(),
+      aiGenerationsUsed: 0,
+      aiRegenerationsUsed: 0,
+    },
+  });
 }
 
 /** Inbox drafting, automatic replies and performance analysis share the included AI allowance. */
 export async function consumeCalendarAiGeneration(calendarId: string) {
   const calendar = await db.socialCalendar.findUnique({ where: { id: calendarId }, select: { managerId: true } });
-  if (!calendar) return { allowed: false, used: 0, limit: 0, remaining: 0 };
+  if (!calendar) return { allowed: false, used: 0, limit: 0, remaining: 0, engageTrial: false };
   return consumeAiGeneration(calendar.managerId);
 }
 
@@ -937,7 +1055,7 @@ export async function consumeAiRegeneration(
   }
 
   const limit = CONTENT_WORKSPACE_PLANS[plan].aiRegenerations;
-  const usage = await getOrCreateContentWorkspaceUsage(creatorId);
+  const usage = await getOrCreateContentWorkspaceUsage(creatorId, plan === "ENGAGE" && creator.contentWorkspaceBillingStatus === "TRIAL");
 
   if (usage.aiRegenerationsUsed >= limit || usage.aiGenerationsUsed >= limit) {
     return {

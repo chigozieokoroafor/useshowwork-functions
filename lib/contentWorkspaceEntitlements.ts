@@ -12,6 +12,15 @@
 
 export type ContentWorkspacePlan = "CREATOR" | "GROWTH" | "STUDIO" | "UNLIMITED" | "ENGAGE";
 
+export const ENGAGE_TRIAL_AI_REPLY_LIMIT = 50;
+export const WORKSPACE_TRIAL_AI_CREDITS_LIMIT = 10;
+export const WORKSPACE_TRIAL_CREDIT_COST_SINGLE_DRAFT = 1;
+export const WORKSPACE_TRIAL_CREDIT_COST_CONTENT_PLAN = 3;
+
+export function getTrialAiCreditCost(draftsCount: number): number {
+  return draftsCount <= 1 ? WORKSPACE_TRIAL_CREDIT_COST_SINGLE_DRAFT : WORKSPACE_TRIAL_CREDIT_COST_CONTENT_PLAN;
+}
+
 export type ContentWorkspaceBillingCycle = "MONTHLY" | "ANNUAL";
 
 export interface ContentWorkspaceEntitlements {

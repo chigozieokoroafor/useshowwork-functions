@@ -1,21 +1,22 @@
-import { brandPersonalityDocumentId } from "./knowledge/brandPersonality";
-import { databaseUnavailable } from "./databaseAvailability";
-import { ContentGenerationError } from "./content/generationError";
-import { AiProviderError } from "./content/providerError";
-import { checkBriefStorage } from "./content/briefStorage";
-import { scheduledContentDate, generationCount } from "./content/schedule";
-import { parseCreativeBrief } from "./content/brief";
-import { recentContentMemory } from "./content/creativeGeneration";
-import { sourceFingerprint } from "./knowledge/retrieval";
-import { getBusinessKnowledgeContext } from "./knowledge/context";
-import { complimentaryAccessSelect } from "./complimentaryAccess";
-import { calendarFeatureGate } from "./calendarPermissions";
+import { notifyCalendarWorkflow } from "@/lib/calendarWorkflowEmails";
+import { brandPersonalityDocumentId } from "@/lib/knowledge/brandPersonality";
+import { databaseUnavailable } from "@/lib/databaseAvailability";
+import { ContentGenerationError } from "@/lib/content/generationError";
+import { AiProviderError } from "@/lib/content/providerError";
+import { checkBriefStorage } from "@/lib/content/briefStorage";
+import { scheduledContentDate, generationCount } from "@/lib/content/schedule";
+import { parseCreativeBrief } from "@/lib/content/brief";
+import { recentContentMemory } from "@/lib/content/creativeGeneration";
+import { sourceFingerprint } from "@/lib/knowledge/retrieval";
+import { getBusinessKnowledgeContext } from "@/lib/knowledge/context";
+import { complimentaryAccessSelect } from "@/lib/complimentaryAccess";
+import { calendarFeatureGate } from "@/lib/calendarPermissions";
 import { NextRequest, NextResponse } from "next/server";
 
-import { db } from "./db";
-import { hasCalendarPermission } from "./calendarPermissions";
-import { consumeAiGeneration, getContentWorkspacePlan } from "./contentWorkspaceUsage";
-import { generateContentCalendar } from "./openai";
+import { db } from "@/lib/db";
+import { hasCalendarPermission } from "@/lib/calendarPermissions";
+import { consumeAiGeneration, refundAiGeneration, getContentWorkspacePlan } from "@/lib/contentWorkspaceUsage";
+import { generateContentCalendar } from "@/lib/openai";
 import type { Prisma, SocialPlatform } from "@prisma/client";
 
 const VALID_PLATFORMS: SocialPlatform[] = ["INSTAGRAM", "TIKTOK", "YOUTUBE", "FACEBOOK", "X", "LINKEDIN"];
@@ -110,12 +111,26 @@ export async function generateCalendarDrafts(req: NextRequest, { params }: { par
     }, { status: 503 });
   }
 
+  const { drafts: expectedDrafts } = generationCount(
+    startDate,
+    endDate,
+    typeof postsPerWeek === "number" ? postsPerWeek : 3,
+    platforms as string[],
+    contentStrategy as string | undefined,
+    contentGroups as string[][] | undefined
+  );
+  const creditCost = expectedDrafts <= 1 ? 1 : 3;
+
   const plan = getContentWorkspacePlan(owner);
-  const consumed = await consumeAiGeneration(owner.id);
+  const consumed = await consumeAiGeneration(owner.id, creditCost);
   if (!consumed.allowed) {
+    const errorMsg = consumed.isTrial
+      ? "You have run out of free trial credits (10 credits limit). Please subscribe to continue generating content."
+      : `Your AI allowance of ${consumed.limit} generations is unavailable or used up. Upgrade your plan or wait for your next monthly allowance.`;
     return NextResponse.json({
-      error: `Your AI allowance of ${consumed.limit} generations is unavailable or used up. Upgrade your plan or wait for your next monthly allowance.`,
-      code: "AI_GENERATION_LIMIT_REACHED", plan,
+      error: errorMsg,
+      code: consumed.isTrial ? "SUBSCRIBE_REQUIRED" : "AI_GENERATION_LIMIT_REACHED",
+      plan,
     }, { status: 403 });
   }
 
@@ -183,107 +198,77 @@ export async function generateCalendarDrafts(req: NextRequest, { params }: { par
       };
     });
 
-    // Two bulk writes atomically preserve the initial brief and its version history.
-    generationPhase = "persistence";
-    const posts = await db.$transaction(async tx => {
-      let created: any[] = [];
-      if (typeof (tx.calendarPost as any).createManyAndReturn === "function") {
-        try {
-          created = await (tx.calendarPost as any).createManyAndReturn({ data: rows });
-        } catch {
-          created = [];
-        }
-      }
-      if (!created.length) {
-        created = [];
-        for (const data of rows) {
-          created.push(await tx.calendarPost.create({ data }));
-        }
-      }
-      const snapshots = created.filter(post => post.creativeBrief).map(post => ({
-        postId: post.id,
-        generationNumber: 1,
-        postDate: post.postDate,
-        platform: post.platform,
-        postType: post.postType,
-        category: post.category,
-        hook: post.hook,
-        script: post.script,
-        caption: post.caption,
-        contentIdea: post.contentIdea,
-        cta: post.cta,
-        hashtags: post.hashtags,
-        creativeBrief: post.creativeBrief as Prisma.InputJsonValue
-      }));
-      if (snapshots.length) await tx.calendarPostAiGeneration.createMany({ data: snapshots });
-      return created;
-    }, { timeout: 25000 });
+  // Two bulk writes atomically preserve the initial brief and its version history.
+generationPhase = "persistence";
+const posts = await db.$transaction(async tx=>{
+  const created=await tx.calendarPost.createManyAndReturn({data:rows});
+  const snapshots=created.filter(post=>post.creativeBrief).map(post=>({postId:post.id,generationNumber:1,postDate:post.postDate,platform:post.platform,postType:post.postType,category:post.category,hook:post.hook,script:post.script,caption:post.caption,contentIdea:post.contentIdea,cta:post.cta,hashtags:post.hashtags,creativeBrief:post.creativeBrief as Prisma.InputJsonValue}));
+  if(snapshots.length)await tx.calendarPostAiGeneration.createMany({data:snapshots});
+  return created;
+},{timeout:20000});
 
-    return NextResponse.json({
-      created: posts.length,
-      posts,
-      aiGenerationsRemaining: null,
-    });
+await notifyCalendarWorkflow({
+  kind: "generated", calendarId: id, actorId: creator.id, key: jobId ?? posts[0]?.id ?? "",
+  postIds: posts.map(post => post.id), range: [startDate, endDate],
+});
+
+return NextResponse.json({
+  created: posts.length,
+  posts,
+  aiGenerationsRemaining: null,
+});
 
   } catch (error) {
-    console.error("[Calendar AI Generation] Failed", {
+  console.error("[Calendar AI Generation] Failed", {
+    calendarId: id,
+    creatorId: creator.id,
+    phase: generationPhase,
+    errorType: error instanceof Error ? error.name : "UnknownError",
+    errorMessage: error instanceof Error ? error.message : String(error),
+    errorStack: error instanceof Error ? error.stack : undefined,
+    code: typeof error === "object" && error !== null && "code" in error ? String(error.code) : undefined,
+    stack: error
+  });
+
+  try {
+    await refundAiGeneration(owner.id, typeof creditCost === "number" ? creditCost : 1);
+  } catch (refundError) {
+    console.error("[Calendar AI Generation] Allowance refund failed", {
       calendarId: id,
-      creatorId: creator.id,
-      phase: generationPhase,
-      errorType: error instanceof Error ? error.name : "UnknownError",
-      errorMessage: error instanceof Error ? error.message : String(error),
-      errorStack: error instanceof Error ? error.stack : undefined,
-      code: typeof error === "object" && error !== null && "code" in error ? String(error.code) : undefined,
-      stack: error
+      creatorId: owner.id,
+      errorType: refundError instanceof Error ? refundError.name : "UnknownError",
     });
-
-    try {
-      await db.contentWorkspaceUsage.updateMany({
-        where: {
-          creatorId: owner.id,
-          aiGenerationsUsed: { gt: 0 },
-        },
-        data: {
-          aiGenerationsUsed: { decrement: 1 },
-        },
-      });
-    } catch (refundError) {
-      console.error("[Calendar AI Generation] Allowance refund failed", {
-        calendarId: id,
-        creatorId: owner.id,
-        errorType: refundError instanceof Error ? refundError.name : "UnknownError",
-      });
-    }
-
-    if (error instanceof Error && error.name === "KnowledgeCoverageError") {
-      return NextResponse.json({ code: "KNOWLEDGE_COVERAGE_REQUIRED", error: error.message }, { status: 422 });
-    }
-
-    if (error instanceof AiProviderError) {
-      return NextResponse.json({ code: error.code, error: error.message, requestId: error.requestId }, { status: error.status === 429 ? 429 : 502 });
-    }
-
-    if (error instanceof ContentGenerationError) {
-      return NextResponse.json({ code: error.code, error: error.message }, { status: 422 });
-    }
-
-    if (databaseUnavailable(error)) {
-      return NextResponse.json({ code: "AI_STORAGE_TEMPORARILY_UNAVAILABLE", error: "The database became unavailable during generation or saving. Check your drafts before starting another batch." }, { status: 503 });
-    }
-
-    const timedOut =
-      error instanceof Error &&
-      (["TimeoutError", "AbortError"].includes(error.name) ||
-        error.message.includes("Transaction already closed") ||
-        error.message.includes("Transaction API error"));
-
-    return NextResponse.json(
-      {
-        error: timedOut
-          ? "Content generation took too long. Please try again."
-          : "We couldn't complete content generation. Please try again.",
-      },
-      { status: timedOut ? 504 : 502 }
-    );
   }
+
+  if (error instanceof Error && error.name === "KnowledgeCoverageError") {
+    return NextResponse.json({ code: "KNOWLEDGE_COVERAGE_REQUIRED", error: error.message }, { status: 422 });
+  }
+
+  if (error instanceof AiProviderError) {
+    return NextResponse.json({ code: error.code, error: error.message, requestId: error.requestId }, { status: error.status === 429 ? 429 : 502 });
+  }
+
+  if (error instanceof ContentGenerationError) {
+    return NextResponse.json({ code: error.code, error: error.message }, { status: 422 });
+  }
+
+  if (databaseUnavailable(error)) {
+    return NextResponse.json({ code: "AI_STORAGE_TEMPORARILY_UNAVAILABLE", error: "The database became unavailable during generation or saving. Check your drafts before starting another batch." }, { status: 503 });
+  }
+
+  const timedOut =
+    error instanceof Error &&
+    (["TimeoutError", "AbortError"].includes(error.name) ||
+      error.message.includes("Transaction already closed") ||
+      error.message.includes("Transaction API error"));
+
+  return NextResponse.json(
+    {
+      error: timedOut
+        ? "Content generation took too long. Please try again."
+        : "We couldn't complete content generation. Please try again.",
+    },
+    { status: timedOut ? 504 : 502 }
+  );
+}
 }

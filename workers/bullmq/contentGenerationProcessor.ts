@@ -1,3 +1,4 @@
+import { consumeAiGeneration, refundAiGeneration } from "../../lib/contentWorkspaceUsage";
 import { notifyCalendarWorkflow } from "../../lib/calendarWorkflowEmails";
 import { Job } from "bullmq";
 import { db } from "../../lib/db";
@@ -85,6 +86,20 @@ export async function processContentGenerationJob(job: Job<ContentGenerationJobD
       contentStrategy as string | undefined,
       contentGroups as string[][] | undefined
     );
+
+    const creditCost = expectedDrafts <= 1 ? 1 : 3;
+    console.log(`[BullMQ AI Gen] Checking and deducting AI generation allowance (expectedDrafts: ${expectedDrafts}, creditCost: ${creditCost}) for manager ${calendar.managerId}...`);
+    const allowance = await consumeAiGeneration(calendar.managerId, creditCost);
+    if (!allowance.allowed) {
+      const isTrial = allowance.isTrial;
+      const errorMsg = isTrial
+        ? "You have run out of free trial credits (10 credits limit). Please subscribe to continue generating content."
+        : `Your AI allowance of ${allowance.limit} generations is unavailable or used up. Upgrade your plan or wait for the next billing cycle.`;
+      const err = new Error(errorMsg);
+      (err as any).status = 403;
+      (err as any).code = isTrial ? "SUBSCRIBE_REQUIRED" : "QUOTA_EXCEEDED";
+      throw err;
+    }
 
     console.log(`[BullMQ AI Gen] Preparing business knowledge context for calendar ${calendarId}...`);
     const [businessSummary, recentContent] = await Promise.all([
@@ -258,14 +273,12 @@ export async function processContentGenerationJob(job: Job<ContentGenerationJobD
       ? error.status
       : 500;
 
-    // Refund AI generation count
+    // Refund AI generation count / trial credits
     try {
       const calendar = await db.socialCalendar.findUnique({ where: { id: calendarId }, select: { managerId: true } });
       if (calendar?.managerId) {
-        await db.contentWorkspaceUsage.updateMany({
-          where: { creatorId: calendar.managerId, aiGenerationsUsed: { gt: 0 } },
-          data: { aiGenerationsUsed: { decrement: 1 } },
-        });
+        const costToRefund = typeof creditCost === "number" ? creditCost : 1;
+        await refundAiGeneration(calendar.managerId, costToRefund);
       }
     } catch (refundError) {
       console.error("[BullMQ AI Gen] Failed to refund usage:", refundError);
